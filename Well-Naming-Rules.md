@@ -69,7 +69,7 @@ So whether a well is 100 or 102 depends on **whether another well has already be
 The AER publishes **Map-94: Map of Alberta Strike Areas**, an annual, free map plus a list of every field and strike area with its approved abbreviation:
 
 - Download: https://www.aer.ca/documents/catalog/Map94_Strike_Areas.zip
-- The year-end 2026 edition has 995 names. It's built into `LISP/AER Strike Areas.lsp`.
+- The year-end 2026 edition has 995 names. It's built into the bottom of `LISP/Well Name Header.lsp` (`WNH_STRIKE_AREAS`).
 - Each entry has the field code, strike code, name, **abbreviation**, and one reference township and range.
 
 **Which name to use** (fields take priority over strike areas):
