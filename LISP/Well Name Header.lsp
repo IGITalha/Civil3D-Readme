@@ -14,10 +14,22 @@
 ;;;   LS, Sec, Twp, Rge, Mer           -> worked out from the "10-Section Labels"
 ;;;                                       (section number over 59-24-5 at each
 ;;;                                       section centre), LSD by 4 x 4 split
-;;;   UWI                              -> nearby "Bottom Hole 100/5-18" label,
-;;;                                       else UWI drawing property, else 100
-;;;   Line order                       -> order of the wells in the page 1
-;;;                                       ELEVATIONS note, else north to south
+;;;   Existing wells on the pad        -> AER survey lines ("ERCB Wells -
+;;;   (clients with Existing = T)         Directional_Lines") starting on the
+;;;                                       pad; listed under the new ones, black
+;;;   UWI                              -> nearby "Bottom Hole 102/5-18" label or
+;;;                                       UWI property; otherwise wells ending
+;;;                                       in the same LSD get 100, 102, 103...
+;;;                                       (existing wells first)
+;;;   Strike area per well             -> looked up from the bottom hole
+;;;                                       section in "Well Name Header -
+;;;                                       Strike Areas.txt" (AER order data,
+;;;                                       field wins); Strike option
+;;;                                       overrides; property if not found
+;;;   Line order                       -> kept as on page 1 when every well is
+;;;                                       already there; else new wells in the
+;;;                                       ELEVATIONS note order (else wellhead
+;;;                                       north to south), then existing wells
 ;;; Fallbacks: no drill paths -> "Bottom Hole" labels (Twp/Rge from ATS
 ;;; quarter labels or BH props); nothing at all -> one line from BH props.
 ;;;
@@ -39,26 +51,63 @@
 
 ;;; ---- Settings ---------------------------------------------------------------
 (setq WNH_MAX_LENGTH 36)
+;;; Fit the header to the space on page 1 (shrink names if they'd run into
+;;; what's below). nil = off: names keep page 1's current height and spacing.
+(setq WNH_FIT nil)
+(setq WNH_NAME_HEIGHT 5.0)			; name text height on Wellsite.dwt
 (setq WNH_DEFAULT_SPACING 7.919)		; gap between name lines on Wellsite.dwt
+(setq WNH_MIN_SCALE 0.6)			; never shrink names below 60% (3.0 high)
+(setq WNH_FIT_MARGIN 2.0)			; keep the header this far above what's below it
+(setq WNH_SIDE_MARGIN 12.0)			; keep names this far inside the sheet edges
 (setq WNH_BH_LAYER "Drill Path Text")
 (setq WNH_ATS_LAYER "ATS Labels Quarter")
 (setq WNH_PATH_LAYER "Drill Path")		; well centre -> bottom hole polylines
 (setq WNH_SECTION_LAYER "10-Section Labels")	; "18" over "59-24-5" at section centres
 (setq WNH_EDGE_WARN 25.0)			; warn if a point is this close (m) to an LSD line
 
-;;; Operators that always show the UWI, even 100 on the first well.
-;;; Everyone else leaves 100 out (TOURMALINE HZ ...) and shows 102, 103 ...
-(setq WNH_ALWAYS_SHOW_UWI '("CVE"))
+;;; ---- Clients ----------------------------------------------------------------
+;;; One line per client. The Operator drawing property is matched against the
+;;; first column (or the short form). A client not listed gets the defaults:
+;;; no 100, new wells only, no short form.
+;;;
+;;;   Show 100   T = first well in the LSD shows 100  (CVE 100 HZ BERLRW ...)
+;;;              nil = 100 left out, 102 / 103 shown (TOURMALINE HZ SMOKY ...)
+;;;   Existing   T = existing wells on the pad are listed under the new ones,
+;;;              in black
+;;;   Short      AER-accepted short form, used only if a name is over 36
+;;;
+;;; Checked against the AER ST37 well list (wells spudded 2022 on, Nov 2026):
+;;;   CVE         HZ wells: about half show 100; the IGI sheet says always
+;;;   TOURMALINE  never shows 100 (0 of 609); 102/103 shown
+;;;   WHITECAP    never shows 100 (0 of 471); WCP also used by the AER
+;;;   ACERTA      never shows 100; AOC until 2024, ACERTA on 2026 licences
+;;;
+;;;  Operator       Show 100  Existing  Short
+(setq WNH_CLIENTS
+  '(("CVE"          T         nil       nil)
+    ("TOURMALINE"   nil       T         nil)
+    ("WHITECAP"     nil       nil       "WCP")
+    ("ACERTA"       nil       nil       "AOC")
+   )
+) ;_ end of setq
 
-;;; AER abbreviations, only used when a name is over the limit.
-;;; Operator is shortened first, then strike area. ("FULL NAME" . "ABBR")
-(setq WNH_OPERATOR_ABBR '())
+;;; Existing wells (for clients with Existing = T): AER directional survey
+;;; lines that start within WNH_PAD_RADIUS of a new well centre.
+(setq WNH_EXISTING_LAYERS '("ERCB Wells - Directional_Lines" "well_bore"))
+(setq WNH_PAD_RADIUS 100.0)
+
+;;; Strike area lookup file. nil = look next to this .lsp / on the support
+;;; path / on O:. Set a full path here if you keep it somewhere else.
+(setq WNH_STRIKE_FILE nil)
+
+;;; Strike area short forms, only used when a name is over the limit.
+;;; ("FULL" . "SHORT")
 (setq WNH_STRIKE_ABBR '())
 
 
 ;;;=============================================================================
 ;;; Main command
-(defun c:WNH (/ *error* wells names ss)
+(defun c:WNH (/ *error* wells names ss ans)
   (defun *error* (msg)
     (if	(not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nWNH error: " msg))
@@ -68,17 +117,20 @@
   ) ;_ end of defun
 
   (setvar "CMDECHO" 0)
+  (setq *wnh-strike-map* nil *wnh-strike-file* nil *wnh-page1* nil)
   (wnh-ensure-props)
 
-  (setq wells (wnh-get-wells)
-	names (mapcar 'car wells)
-  ) ;_ end of setq
-  (wnh-report wells)
-
-  (initget "Yes No")
-  (if (= (getkword "\nWrite these names onto page 1? [Yes/No] <Yes>: ") "No")
-    (exit)
-  ) ;_ end of if
+  (setq ans "Strike")
+  (while (= ans "Strike")
+    (setq wells	(wnh-get-wells)
+	  names	(mapcar 'car wells)
+    ) ;_ end of setq
+    (wnh-report wells)
+    (initget "Yes No Strike")
+    (setq ans (getkword "\nWrite these names onto page 1? [Yes/No/Strike areas] <Yes>: "))
+    (if (= ans "Strike") (wnh-ask-strikes wells))
+  ) ;_ end of while
+  (if (= ans "No") (exit))
 
   ;; Find the name lines under the page 1 title; ask only if they can't be found
   (if (setq ss (wnh-find-name-lines))
@@ -99,7 +151,7 @@
   (if ss
     (progn
       (command "_.UNDO" "_BEGIN")
-      (wnh-write names ss)
+      (wnh-write wells ss)
       (if (wnh-update-props wells)
 	(princ "\nWNH: Sur / BH drawing properties updated from the drill paths.")
       ) ;_ end of if
@@ -114,24 +166,37 @@
 
 ;;;=============================================================================
 ;;; Build the list of wells, in page order.
-;;; Each well: (name twpRgeFromProps warnings surfaceLegal bhLegal)
+;;; Each well: (name twpRgeFromProps warnings surfaceLegal bhLegal existing)
 ;;;   legal = (ls sec twp rge mer), nil when not worked out from the drawing
 ;;;
 ;;; Sources, best first:
-;;;   1. Drill Path polylines + section labels (fully automatic)
+;;;   1. Drill Path polylines + section labels (fully automatic), plus the
+;;;      existing wells on the pad (AER survey lines) for clients with Existing = T
 ;;;   2. "Bottom Hole 100/5-18" labels
 ;;;   3. BH drawing properties (one well)
-(defun wnh-get-wells (/ op typ strike paths secs bhs ats out tr fromProps)
+;;; Strike area: the Strike Area property, except for sections given another
+;;; one with the Strike option, or already shown with another one on page 1.
+(defun wnh-get-wells (/ op typ strike paths secs bhs ats out tr fromProps smap s sl)
   (setq	op     (wnh-prop "Operator")
 	typ    (wnh-prop "HZ or DD")
 	strike (car (wnh-check-strike (wnh-prop "Strike Area")))	; full name -> AER abbreviation
 	paths  (wnh-drill-paths)
 	secs   (wnh-section-labels)
+	*wnh-header* (wnh-header-texts)
+	smap   (wnh-header-strikes *wnh-header*)
   ) ;_ end of setq
 
   (cond
     ((and paths secs)
-     (setq bhs (wnh-order-wells (wnh-wells-from-paths paths secs))))
+     ;; Existing wells always count for 100/102 numbering; they're only
+     ;; listed on page 1 for clients with Existing = T
+     (setq bhs (wnh-assign-uwis (append (wnh-wells-from-paths paths secs)
+					(wnh-existing-wells paths secs))
+				secs))
+     (if (not (wnh-client-opt op 2))
+       (setq bhs (vl-remove-if (function (lambda (w) (nth 10 w))) bhs))
+     ) ;_ end of if
+     (setq bhs (wnh-order-wells bhs)))
     ((setq bhs (wnh-get-bottom-holes))
      (setq bhs (wnh-order-wells bhs)))
     (T
@@ -140,18 +205,22 @@
   ) ;_ end of cond
 
   (setq ats (if (not (and paths secs)) (wnh-get-ats-labels)))
-  (foreach bh bhs	; bh = (key uwi ls sec twp rge point [warnings sur bhLegal])
+  (foreach bh bhs	; bh = (key uwi ls sec twp rge point [warnings sur bhLegal existing surPoint])
     (setq fromProps nil)
     (cond ((and (nth 4 bh) (nth 5 bh)) (setq tr (list (nth 4 bh) (nth 5 bh))))
 	  ((and ats (setq tr (wnh-twp-rge-at (nth 6 bh) ats))))
 	  (T (setq tr (list (wnh-prop "BH Twp") (wnh-prop "BH Rge")) fromProps T))
     ) ;_ end of cond
-    (setq out (cons (list (wnh-build-name op (nth 1 bh) typ strike
+    (setq sl (wnh-strike-for bh tr strike smap)
+	  s  (car sl)
+    ) ;_ end of setq
+    (setq out (cons (list (wnh-build-name op (cond ((nth 1 bh)) ("100")) typ s
 					  (strcat (nth 2 bh) "-" (nth 3 bh) "-" (car tr) "-" (cadr tr)))
 			  fromProps
-			  (nth 7 bh)
+			  (append (nth 7 bh) (cdr sl))
 			  (nth 8 bh)
-			  (nth 9 bh))
+			  (nth 9 bh)
+			  (nth 10 bh))
 		    out))
   ) ;_ end of foreach
   (reverse out)
@@ -159,6 +228,31 @@
 
 
 ;;;=============================================================================
+;;; Strike area for one well: (abbreviation warning...)
+;;;   1. what you typed with the Strike option this run
+;;;   2. the AER order data for the bottom hole section (field wins over
+;;;      strike area); a split section takes the page 1 choice if it's one
+;;;      of the areas, else the first, with a warning
+;;;   3. page 1, when it already shows more than one strike area
+;;;   4. the Strike Area drawing property
+(defun wnh-strike-for (bh tr strike smap / skey mer look prev)
+  (setq	skey (strcat (nth 3 bh) "-" (car tr) "-" (cadr tr))
+	mer  (cond ((if (nth 9 bh) (nth 4 (nth 9 bh)))) ((wnh-prop "Mer")))
+	look (wnh-tract-strikes (nth 3 bh) (car tr) (cadr tr) mer)
+	prev (cdr (assoc skey smap))
+  ) ;_ end of setq
+  (cond	((cdr (assoc skey *wnh-strike-map*)) (list (cdr (assoc skey *wnh-strike-map*))))
+	((= (length look) 1) (list (car look)))
+	(look
+	 (list (if (member prev look) prev (car look))
+	       (strcat "Sec " skey " is split between " (wnh-join look)
+		       " - check the strike area map (Strike areas option to change)")))
+	(prev (list prev))
+	(T (list strike))
+  ) ;_ end of cond
+) ;_ end of defun
+
+
 ;;; Drill paths: returns list of (surfacePoint bottomHolePoint)
 ;;; The surface end is the one nearest another path (pad wells share a
 ;;; surface); with a single path the first vertex is taken as the surface.
@@ -293,33 +387,199 @@
 
 ;;;=============================================================================
 ;;; Turn drill paths into well records:
-;;; (key uwi ls sec twp rge bhPoint warnings surLegal bhLegal)
-(defun wnh-wells-from-paths (paths secs / labels aer out bh sur lab uwi warn key)
-  (setq	labels (wnh-get-bottom-holes)
-	aer    (wnh-aer-bottom-holes)
-  ) ;_ end of setq
+;;; (key uwi ls sec twp rge bhPoint warnings surLegal bhLegal existing surPoint)
+;;; uwi is nil unless a label or the UWI property gives one; wnh-assign-uwis
+;;; fills in the rest.
+(defun wnh-wells-from-paths (paths secs / labels out bh sur lab uwi warn)
+  (setq labels (wnh-get-bottom-holes))
   (foreach p paths
     (setq sur  (wnh-legal-at (car p) secs)
 	  bh   (wnh-legal-at (cadr p) secs)
 	  warn nil
 	  lab  (wnh-nearest-label (cadr p) labels 600.0)
-	  uwi  (cond ((cadr lab)) ((/= (wnh-prop "UWI") "") (wnh-prop "UWI")) ("100"))
-	  key  (strcat uwi "/" (car bh) "-" (cadr bh))
+	  uwi  (cond ((cadr lab))
+		     ((not (member (wnh-prop "UWI") '("" "100"))) (wnh-prop "UWI")))
     ) ;_ end of setq
-    (if	(< (nth 5 bh) WNH_EDGE_WARN)
-      (setq warn (cons (strcat "bottom hole is only " (rtos (nth 5 bh) 2 0)
-			       " m from an LSD line - check the LS (or road allowance)")
-		       warn))
-    ) ;_ end of if
+    (setq warn (wnh-edge-warning bh))
     (if	(and lab (not (and (= (nth 2 lab) (car bh)) (= (nth 3 lab) (cadr bh)))))
       (setq warn (cons (strcat "label on the drawing says " (car lab)) warn))
     ) ;_ end of if
-    (if	(and (= uwi "100") (wnh-aer-well-in-lsd bh aer secs))
-      (setq warn (cons "an AER bottom hole is already in this LSD - UWI may need to be 102" warn))
-    ) ;_ end of if
-    (setq out (cons (list key uwi (car bh) (cadr bh) (caddr bh) (cadddr bh) (cadr p)
-			  (reverse warn) sur bh)
+    (setq out (cons (list nil uwi (car bh) (cadr bh) (caddr bh) (cadddr bh) (cadr p)
+			  (reverse warn) sur bh nil (car p))
 		    out))
+  ) ;_ end of foreach
+  (reverse out)
+) ;_ end of defun
+
+(defun wnh-edge-warning (bh)
+  (if (< (nth 5 bh) WNH_EDGE_WARN)
+    (list (strcat "bottom hole is only " (rtos (nth 5 bh) 2 0)
+		  " m from an LSD line - check the LS (or road allowance)"))
+  ) ;_ end of if
+) ;_ end of defun
+
+
+;;;=============================================================================
+;;; Existing wells on the pad, from the AER directional survey lines.
+;;; A line counts when one end is within WNH_PAD_RADIUS of a new well centre.
+;;;   - copies of the same line are dropped
+;;;   - lines that are one of the new wells (AER already has it) are dropped
+;;;   - a hand-drawn path (2-3 vertices) and an AER survey line leaving the
+;;;     same spot in the same direction are one well: the drawn path's end is
+;;;     used (it is the licensed bottom hole) and the survey end is mentioned.
+;;; Returns well records like wnh-wells-from-paths, with existing = T.
+(defun wnh-existing-wells (paths secs / lines kept dropped notes out sur bh warn n)
+  (setq lines (wnh-existing-lines paths))
+  (foreach l lines
+    (if	(not (or (vl-some (function (lambda (k) (and (< (distance (car k) (car l)) 1.0)	; copies are exact;
+						     (< (distance (cadr k) (cadr l)) 1.0))))	; twin wells are ~5 m apart
+			  kept)
+		 (vl-some (function (lambda (p) (and (< (distance (car p) (car l)) 10.0)
+						     (< (distance (cadr p) (cadr l)) 100.0))))
+			  paths)))
+      (setq kept (append kept (list l)))
+    ) ;_ end of if
+  ) ;_ end of foreach
+  (foreach pl kept
+    (if (<= (caddr pl) 3)
+      (foreach m kept
+	(if (and (> (caddr m) 3)
+		 (not (member m dropped))
+		 (< (distance (car pl) (car m)) 10.0)
+		 (< (wnh-angle-diff pl m) (/ pi 12.0)))	; 15 degrees
+	  (setq dropped (cons m dropped) notes (cons (cons pl m) notes))
+	) ;_ end of if
+      ) ;_ end of foreach
+    ) ;_ end of if
+  ) ;_ end of foreach
+  (foreach l kept
+    (if (not (member l dropped))
+      (progn
+	(setq sur  (wnh-legal-at (car l) secs)
+	      bh   (wnh-legal-at (cadr l) secs)
+	      warn (wnh-edge-warning bh)
+	) ;_ end of setq
+	(foreach x notes
+	  (if (equal (car x) l)
+	    (progn
+	      (setq n (wnh-legal-at (cadr (cdr x)) secs))
+	      (if (not (and (= (car n) (car bh)) (= (cadr n) (cadr bh))))
+		(setq warn (cons (strcat "AER survey line ends in " (car n) "-" (cadr n)
+					 ", the drawn path in " (car bh) "-" (cadr bh) " - check which is licensed")
+				 warn))
+	      ) ;_ end of if
+	    ) ;_ end of progn
+	  ) ;_ end of if
+	) ;_ end of foreach
+	(setq out (cons (list nil nil (car bh) (cadr bh) (caddr bh) (cadddr bh) (cadr l)
+			      warn sur bh T (car l))
+			out))
+      ) ;_ end of progn
+    ) ;_ end of if
+  ) ;_ end of foreach
+  (reverse out)
+) ;_ end of defun
+
+;;; (surfacePoint bottomHolePoint vertexCount) for each AER well line that
+;;; starts on the pad
+(defun wnh-existing-lines (paths / centres ss i e v f l df dl lst)
+  (setq centres (mapcar 'car paths))
+  (foreach lay WNH_EXISTING_LAYERS
+    (if (setq ss (ssget "_X" (list '(0 . "LWPOLYLINE") (cons 8 lay) '(410 . "Model"))))
+      (progn
+	(setq i 0)
+	(while (< i (sslength ss))
+	  (setq e (entget (ssname ss i)) i (1+ i) v nil)
+	  (foreach p e (if (= (car p) 10) (setq v (cons (wnh-2d (cdr p)) v))))
+	  (setq v  (reverse v)
+		f  (car v)
+		l  (last v)
+		df (wnh-min-dist f centres)
+		dl (wnh-min-dist l centres)
+	  ) ;_ end of setq
+	  (if (and (<= (min df dl) WNH_PAD_RADIUS) (> (distance f l) 20.0))
+	    (setq lst (cons (if (<= df dl) (list f l (length v)) (list l f (length v))) lst))
+	  ) ;_ end of if
+	) ;_ end of while
+      ) ;_ end of progn
+    ) ;_ end of if
+  ) ;_ end of foreach
+  (reverse lst)
+) ;_ end of defun
+
+(defun wnh-min-dist (pt pts / bd)
+  (setq bd 1e99)
+  (foreach p pts (setq bd (min bd (distance pt p))))
+  bd
+) ;_ end of defun
+
+(defun wnh-angle-diff (a b / d)
+  (setq d (abs (- (angle (car a) (cadr a)) (angle (car b) (cadr b)))))
+  (if (> d pi) (- (* 2.0 pi) d) d)
+) ;_ end of defun
+
+
+;;;=============================================================================
+;;; UWI for each well: wells ending in the same LSD get 100, 102, 103 ...
+;;; Existing wells take theirs first (they were licensed first), ordered by
+;;; wellhead south to north; then the new wells. A UWI from a label or the
+;;; UWI property is kept. Sets the key (uwi/ls-sec) used for ordering.
+(defun wnh-assign-uwis (wells secs / aer taken lsd used uwi warn out)
+  (setq aer (wnh-aer-bottom-holes))
+  (foreach w (append (wnh-sort-by-y (vl-remove-if-not (function (lambda (w) (nth 10 w))) wells) T)
+		     (vl-remove-if (function (lambda (w) (nth 10 w))) wells))
+    (setq lsd  (strcat (nth 2 w) "-" (nth 3 w) "-" (nth 4 w) "-" (nth 5 w))
+	  used (cdr (assoc lsd taken))
+	  uwi  (nth 1 w)
+	  warn (nth 7 w)
+    ) ;_ end of setq
+    (cond
+      ((and uwi (member uwi used))
+       (setq warn (append warn (list (strcat "UWI " uwi " is also used by another well ending in this LSD")))))
+      (uwi)
+      (T
+       (setq uwi (car (vl-remove-if (function (lambda (u) (member u used)))
+				    '("100" "102" "103" "104" "105" "106" "107" "108" "109"))))
+       (if (and (not (nth 10 w)) (/= uwi "100"))
+	 (setq warn (append warn (list (strcat "UWI " uwi " - an existing well on this pad also ends in "
+					       (nth 2 w) "-" (nth 3 w)))))
+       ) ;_ end of if
+      )
+    ) ;_ end of cond
+    (if	(and (not (nth 10 w)) (= uwi "100") (nth 9 w) (wnh-aer-well-in-lsd (nth 9 w) aer secs))
+      (setq warn (append warn (list "an AER bottom hole is already in this LSD - UWI may need to be 102")))
+    ) ;_ end of if
+    (setq taken	(cons (cons lsd (cons uwi used)) (vl-remove (assoc lsd taken) taken))
+	  out	(cons (append (list (strcat uwi "/" (nth 2 w) "-" (nth 3 w)) uwi)
+			      (wnh-sublist w 2 5)
+			      (list warn)
+			      (wnh-sublist w 8 nil))
+		      out)
+    ) ;_ end of setq
+  ) ;_ end of foreach
+  (reverse out)
+) ;_ end of defun
+
+;;; Wells sorted by wellhead (surface point, else bottom hole) y
+(defun wnh-sort-by-y (wells up)
+  (vl-sort wells
+	   (function (lambda (a b / ya yb)
+		       (setq ya (cadr (cond ((nth 11 a)) ((nth 6 a))))
+			     yb (cadr (cond ((nth 11 b)) ((nth 6 b)))))
+		       (if up (< ya yb) (> ya yb))
+		     ) ;_ end of lambda
+	   ) ;_ end of function
+  ) ;_ end of vl-sort
+) ;_ end of defun
+
+;;; Elements start .. start+len-1 of lst (len nil = to the end)
+(defun wnh-sublist (lst start len / out i)
+  (setq i 0)
+  (foreach x lst
+    (if (and (>= i start) (or (null len) (< i (+ start len))))
+      (setq out (cons x out))
+    ) ;_ end of if
+    (setq i (1+ i))
   ) ;_ end of foreach
   (reverse out)
 ) ;_ end of defun
@@ -360,7 +620,7 @@
 ;;;=============================================================================
 ;;; Fill the Sur / BH drawing properties (what UDP used to do) so the LS line
 ;;; and other fields on the plan match. BH = first well on page 1.
-(defun wnh-update-props (wells / sur bh)
+(defun wnh-update-props (wells / sur bh toks)
   (setq	sur (nth 3 (car wells))
 	bh  (nth 4 (car wells))
   ) ;_ end of setq
@@ -375,6 +635,10 @@
       (wnh-set-prop "BH Sec" (nth 1 bh))
       (wnh-set-prop "BH Twp" (nth 2 bh))
       (wnh-set-prop "BH Rge" (nth 3 bh))
+      (setq toks (wnh-split (car (car wells)) " "))
+      (if (wnh-strike-known-p (nth (- (length toks) 2) toks))	; first well's strike area
+	(wnh-set-prop "Strike Area" (nth (- (length toks) 2) toks))
+      ) ;_ end of if
       (command "_.UPDATEFIELD" (ssget "_X") "")
       T
     ) ;_ end of progn
@@ -392,6 +656,11 @@
     ) ;_ end of if
   ) ;_ end of if
   (if (wnh-placeholder-p "Strike Area" '("" "STRIKE" "CARROT"))
+    (if (setq v (wnh-first-bh-strike))
+      (progn
+	(wnh-set-prop "Strike Area" v)
+	(princ (strcat "\n  Strike Area set to " v " from the AER order data for the first bottom hole."))
+      ) ;_ end of progn
     (progn
       (wnh-strike-hints)
       (if (/= "" (setq v (strcase (getstring T "\nField / Strike Area name or abbreviation (see Job Info\\Strike Area.pdf): "))))
@@ -402,6 +671,7 @@
 	) ;_ end of progn
       ) ;_ end of if
     ) ;_ end of progn
+    ) ;_ end of if (looked up / asked)
     ;; Already filled in: swap a full name for its AER abbreviation
     (if (and (not WNH_TEST_PROPS)
 	     (setq chk (wnh-check-strike (wnh-prop "Strike Area")))
@@ -443,6 +713,77 @@
 	 (list (car e) (strcat "Strike Area \"" v "\" changed to its AER abbreviation " (car e) ".")))
 	(T (list v (strcat "Strike Area \"" v "\" is not in the AER field / strike area list - check it.")))
   ) ;_ end of cond
+) ;_ end of defun
+
+;;;=============================================================================
+;;; Strike area lookup file: "Well Name Header - Strike Areas.txt"
+;;; (built from the AER Order System data by tools/build_strike_tracts.py).
+;;; One line per township:  60-3-6|1-17=RESTHA|18=SMOKY|19-29=RESTHA|...
+;;; WNH looks for it, in order: WNH_STRIKE_FILE, the support path / drawing
+;;; folder, the folder that Well Name Header.lsp is found in, the O: copy.
+
+(defun wnh-strike-file (/ f)
+  (if (null *wnh-strike-file*)
+    (setq *wnh-strike-file*
+	   (cond ((if WNH_STRIKE_FILE (findfile WNH_STRIKE_FILE)))	; (and ...) would return T, not the path
+		 ((findfile "Well Name Header - Strike Areas.txt"))
+		 ((if (setq f (findfile "Well Name Header.lsp"))
+		    (findfile (strcat (vl-filename-directory f) "\\Well Name Header - Strike Areas.txt"))))
+		 ((findfile "O:/IGI/Cad Support/Visual LISP Development/Well Name Header - Strike Areas.txt"))
+		 ("")					; not found - don't search again
+	   ) ;_ end of cond
+    ) ;_ end of setq
+  ) ;_ end of if
+  (if (/= *wnh-strike-file* "") *wnh-strike-file*)
+) ;_ end of defun
+
+;;; The township's line from the file (cached), or nil
+(defun wnh-strike-line (key / path fh ln found)
+  (cond	((assoc key *wnh-strike-cache*) (cdr (assoc key *wnh-strike-cache*)))
+	((setq path (wnh-strike-file))
+	 (setq fh (open path "r"))
+	 (while (and (not found) (setq ln (read-line fh)))
+	   (cond ((wcmatch ln "DATE|*") (setq *wnh-strike-date* (substr ln 6)))
+		 ((= (substr ln 1 (1+ (strlen key))) (strcat key "|")) (setq found ln))
+	   ) ;_ end of cond
+	 ) ;_ end of while
+	 (close fh)
+	 (setq *wnh-strike-cache* (cons (cons key found) *wnh-strike-cache*))
+	 found)
+  ) ;_ end of cond
+) ;_ end of defun
+
+;;; Field / strike area(s) of a section. Returns a list of abbreviations: one
+;;; normally, two where the section is split between areas, nil if unknown.
+(defun wnh-tract-strikes (sec twp rge mer / ln n r a b found)
+  (if (and sec twp rge mer
+	   (setq ln (wnh-strike-line (strcat (itoa (atoi twp)) "-" (itoa (atoi rge)) "-" (itoa (atoi mer))))))
+    (progn
+      (setq n (atoi sec))
+      (foreach part (cdr (wnh-split ln "|"))		; "19-29=RESTHA"
+	(if (and (not found) (setq r (vl-string-search "=" part)))
+	  (progn
+	    (setq a (wnh-split (substr part 1 r) "-")
+		  b (atoi (last a))
+		  a (atoi (car a))
+	    ) ;_ end of setq
+	    (if (<= a n b) (setq found (wnh-split (substr part (+ r 2)) "+")))
+	  ) ;_ end of progn
+	) ;_ end of if
+      ) ;_ end of foreach
+      found
+    ) ;_ end of progn
+  ) ;_ end of if
+) ;_ end of defun
+
+;;; Strike area of the first drill path's bottom hole, or nil
+(defun wnh-first-bh-strike (/ paths secs bh look)
+  (if (and (setq paths (wnh-drill-paths))
+	   (setq secs (wnh-section-labels))
+	   (setq bh (wnh-legal-at (cadr (car paths)) secs))
+	   (setq look (wnh-tract-strikes (nth 1 bh) (nth 2 bh) (nth 3 bh) (nth 4 bh))))
+    (car look)
+  ) ;_ end of if
 ) ;_ end of defun
 
 ;;; Print the fields whose AER reference township is closest to the pad, as a
@@ -487,15 +828,32 @@
 
 
 ;;;=============================================================================
+;;; The WNH_CLIENTS line for an operator (matched on name or short form), or
+;;; nil for a client not in the table (defaults: no 100, no existing wells).
+(defun wnh-client (op)
+  (setq op (strcase (vl-string-trim " " op)))
+  (vl-some (function (lambda (c) (if (or (= (strcase (car c)) op)
+					 (and (nth 3 c) (= (strcase (nth 3 c)) op)))
+				   c)))
+	   WNH_CLIENTS)
+) ;_ end of defun
+
+;;; One column of the client's line (1 = show 100, 2 = existing, 3 = short),
+;;; nil for a client not in the table
+(defun wnh-client-opt (op n / c)
+  (if (setq c (wnh-client op)) (nth n c))
+) ;_ end of defun
+
 ;;; Operator UWI HZ Strike LS-SEC-TWP-RGE, abbreviating if over the limit
 (defun wnh-build-name (op uwi typ strike loc / abbr name)
-  (if (not (or (member (strcase op) (mapcar 'strcase WNH_ALWAYS_SHOW_UWI))
-	       (/= uwi "100")))
+  (setq op (strcase op))
+  (if (not (or (wnh-client-opt op 1) (/= uwi "100")))
     (setq uwi "")
   ) ;_ end of if
   (setq name (wnh-join (list op uwi typ strike loc)))
   (if (and (> (strlen name) WNH_MAX_LENGTH)
-	   (setq abbr (cdr (assoc (strcase op) WNH_OPERATOR_ABBR))))
+	   (setq abbr (wnh-client-opt op 3))
+	   (/= (strcase abbr) (strcase op)))
     (setq op abbr name (wnh-join (list op uwi typ strike loc)))
   ) ;_ end of if
   (if (and (> (strlen name) WNH_MAX_LENGTH)
@@ -579,8 +937,110 @@
 
 
 ;;;=============================================================================
-;;; Order wells as they appear in the page 1 ELEVATIONS note, else north first.
-(defun wnh-order-wells (wells / ss i s e)
+;;; Order of the lines:
+;;;   - if every well is already on page 1, keep that order (so a hand-fixed
+;;;     order survives running WNH again)
+;;;   - otherwise new wells first, in the order of the page 1 ELEVATIONS note,
+;;;     else wellhead north to south; then existing wells, wellhead south to north
+(defun wnh-order-wells (wells / ranked new old)
+  (setq ranked (wnh-header-ranks wells *wnh-header*))
+  (if (and ranked
+	   (not (member nil (mapcar 'car ranked)))
+	   (not (wnh-has-repeats *wnh-header*)))		; a doubled line makes the order unreliable
+    (mapcar 'cdr (vl-sort ranked (function (lambda (a b) (< (car a) (car b))))))
+    (progn
+      (setq new	(wnh-order-new (vl-remove-if (function (lambda (w) (nth 10 w))) wells))
+	    old	(wnh-sort-by-y (vl-remove-if-not (function (lambda (w) (nth 10 w))) wells) T)
+      ) ;_ end of setq
+      (append new old)
+    ) ;_ end of progn
+  ) ;_ end of if
+) ;_ end of defun
+
+;;; ((lineIndex . well) ...): where each well already is on page 1, nil if not.
+;;; A line matches on its LS-SEC-TWP-RGE and on its UWI (102 ... or none).
+(defun wnh-header-ranks	(wells lines / claimed out i idx loc uwi)
+  (foreach w wells
+    (setq loc (strcat (nth 2 w) "-" (nth 3 w) "-" (nth 4 w) "-" (nth 5 w))
+	  uwi (nth 1 w)
+	  i   0
+	  idx nil
+    ) ;_ end of setq
+    (foreach l lines
+      (if (and (not idx)
+	       (not (member i claimed))
+	       (wcmatch l (strcat "* " loc))
+	       (if (= uwi "100")
+		 (not (wcmatch l "*10[2-9] *"))
+		 (vl-string-search (strcat uwi " ") l)))
+	(setq idx i claimed (cons i claimed))
+      ) ;_ end of if
+      (setq i (1+ i))
+    ) ;_ end of foreach
+    (setq out (cons (cons idx w) out))
+  ) ;_ end of foreach
+  (reverse out)
+) ;_ end of defun
+
+(defun wnh-has-repeats (lst)
+  (and lst (or (member (car lst) (cdr lst)) (wnh-has-repeats (cdr lst))))
+) ;_ end of defun
+
+;;; Text of the current page 1 name lines, spaces tidied
+(defun wnh-header-texts	()
+  (mapcar (function (lambda (e) (wnh-join (wnh-split (wnh-dxf 1 (entget e)) " "))))
+	  (cdr (wnh-find-name-lines)))
+) ;_ end of defun
+
+;;; Strike area per section ("SEC-TWP-RGE" . "ABBR") read off the page 1
+;;; names - only when page 1 already uses more than one strike area, so a
+;;; corrected Strike Area property still wins on a single-strike pad.
+(defun wnh-header-strikes (lines / toks loc s lst)
+  (foreach l lines
+    (setq toks (wnh-split l " "))
+    (if	(and (>= (length toks) 3)
+	     (= (length (setq loc (wnh-split (last toks) "-"))) 4)
+	     (wnh-strike-known-p (setq s (nth (- (length toks) 2) toks))))
+      (setq lst (cons (cons (strcat (nth 1 loc) "-" (nth 2 loc) "-" (nth 3 loc)) s) lst))
+    ) ;_ end of if
+  ) ;_ end of foreach
+  (if (vl-some (function (lambda (p) (/= (cdr p) (cdr (car lst))))) lst)
+    (reverse lst)
+  ) ;_ end of if
+) ;_ end of defun
+
+;;; Strike option: ask for the strike area of each bottom hole section.
+;;; Enter keeps what is shown. Answers last until the command ends.
+(defun wnh-ask-strikes (wells / keys k cur v chk toks)
+  (foreach w wells
+    (if (setq k (nth 4 w))
+      (progn
+	(setq k (strcat (nth 1 k) "-" (nth 2 k) "-" (nth 3 k)))
+	(if (not (assoc k keys))
+	  (setq toks (wnh-split (car w) " ")
+		keys (append keys (list (cons k (nth (- (length toks) 2) toks)))))
+	) ;_ end of if
+      ) ;_ end of progn
+    ) ;_ end of if
+  ) ;_ end of foreach
+  (if (null keys) (princ "\nNo bottom hole sections worked out - set the Strike Area drawing property instead."))
+  (foreach k keys
+    (setq cur (cdr k)
+	  v   (getstring T (strcat "\nStrike area for wells ending in Sec " (car k) " <" cur ">: "))
+    ) ;_ end of setq
+    (if	(/= "" (setq v (vl-string-trim " " v)))
+      (progn
+	(setq chk (wnh-check-strike v))
+	(if (cadr chk) (princ (strcat "\n  " (cadr chk))))
+	(setq *wnh-strike-map* (cons (cons (car k) (car chk))
+				     (vl-remove (assoc (car k) *wnh-strike-map*) *wnh-strike-map*)))
+      ) ;_ end of progn
+    ) ;_ end of if
+  ) ;_ end of foreach
+) ;_ end of defun
+
+;;; New wells: order of the page 1 ELEVATIONS note, else wellhead north first.
+(defun wnh-order-new (wells / ss i s e)
   (setq s "")
   (if (setq ss (ssget "_X" '((0 . "MTEXT") (-4 . "<NOT") (410 . "Model") (-4 . "NOT>"))))
     (progn
@@ -602,20 +1062,31 @@
 	       (cond ((and ia ib) (< ia ib))
 		     (ia T)
 		     (ib nil)
-		     (T (> (cadr (nth 6 a)) (cadr (nth 6 b))))
+		     (T (> (cadr (cond ((nth 11 a)) ((nth 6 a))))
+			   (cadr (cond ((nth 11 b)) ((nth 6 b))))))
 	       ) ;_ end of cond
 	     ) ;_ end of lambda
 	   ) ;_ end of function
   ) ;_ end of vl-sort
 ) ;_ end of defun
 
-;;; Position of key in s where it isn't followed by another digit (so 100/5-1
-;;; doesn't match 100/5-18). Returns nil if not found.
-(defun wnh-find-key (s key / pos nxt found)
+;;; Position of key ("102/5-31") in s, or for a 100 well also the bare LS-SEC
+;;; ("16-36") as notes often leave the 100/ off. Returns nil if not found.
+(defun wnh-find-key (s key)
+  (cond	((wnh-find-word s key))
+	((wcmatch key "100/*") (wnh-find-word s (substr key 5)))
+  ) ;_ end of cond
+) ;_ end of defun
+
+;;; Position of word in s where it isn't part of a longer number (so 5-1
+;;; doesn't match 5-18, 102/5-18 or 15-1).
+(defun wnh-find-word (s word / pos nxt prv found)
   (setq pos 0)
-  (while (and (not found) (setq pos (vl-string-search key s pos)))
-    (setq nxt (substr s (+ pos (strlen key) 1) 1))
-    (if	(wcmatch nxt "#")
+  (while (and (not found) (setq pos (vl-string-search word s pos)))
+    (setq nxt (substr s (+ pos (strlen word) 1) 1)
+	  prv (if (> pos 0) (substr s pos 1) "")
+    ) ;_ end of setq
+    (if	(or (wcmatch nxt "#") (wcmatch prv "#,/,-"))
       (setq pos (1+ pos))
       (setq found pos)
     ) ;_ end of if
@@ -631,6 +1102,10 @@
   (foreach w wells
     (setq n (car w))
     (setq msg (strcat msg "\n" n "   (" (itoa (strlen n)) ")"
+		      (if (nth 5 w) "  existing" "")
+		      (if (and (/= (wnh-prop "Operator") "")
+			       (/= (car (wnh-split n " ")) (strcase (wnh-prop "Operator"))))
+			"  (short form - full name over 36)" "")
 		      (if (> (strlen n) WNH_MAX_LENGTH) "  <-- OVER 36!" "")
 		      (if (cadr w) "  *" "")))
     (foreach x (nth 2 w) (setq msg (strcat msg "\n      ! " x)))
@@ -643,6 +1118,15 @@
   (if (cadr (setq s (wnh-check-strike (wnh-prop "Strike Area"))))
     (setq msg (strcat msg "\n\n! " (cadr s)))
   ) ;_ end of if
+  (if (and (/= (wnh-prop "Operator") "") (not (wnh-client (wnh-prop "Operator"))))
+    (setq msg (strcat msg "\n\n! Operator " (wnh-prop "Operator")
+		      " isn't in the client table (WNH_CLIENTS) - using defaults: no 100, new wells only."))
+  ) ;_ end of if
+  (setq msg (strcat msg "\n\n"
+		    (if (wnh-strike-file)
+		      (strcat "Strike areas looked up from each bottom hole section (AER order data "
+			      (cond (*wnh-strike-date*) ("")) ").")
+		      "Strike area lookup file (Well Name Header - Strike Areas.txt) not found - using the Strike Area property.")))
   (if surs
     (setq msg (strcat msg "\n\nSurface: " (car surs)
 		      (if (cdr surs) "\n   ! Well centres are in more than one LS - check the surface line." "")))
@@ -653,43 +1137,104 @@
   ) ;_ end of if
   (princ (strcat "\n\nWell names:" msg "\n"))
   (if (not WNH_TEST_PROPS)
-    (alert (strcat "Well names for page 1:\n" msg "\n\nNext: select the existing well name lines to replace."))
+    (alert (strcat "Well names for page 1:\n" msg
+		   "\n\nNext: Yes writes them onto page 1."
+		   "\nStrike areas lets you give some sections a different strike area."))
   ) ;_ end of if
 ) ;_ end of defun
 
 
 ;;;=============================================================================
-;;; Replace the selected name lines with the new names and shift what's below.
-(defun wnh-write (names ents / anchor top bottom n0 spacing x z base below delta e s y i)
+;;; Replace the name lines with the new names and shift what's below.
+;;; wells = list from wnh-get-wells; existing wells are written ByLayer (black).
+;;;
+;;; Fitting: the names start at the standard size (WNH_NAME_HEIGHT, spaced
+;;; WNH_DEFAULT_SPACING). If the whole header - names plus the WELL(S)
+;;; DRILLED / LS / county lines - would run into whatever is below it on the
+;;; sheet (legend, tables, viewport ...), or a name is wider than the sheet,
+;;; text height and spacing are shrunk together to fit, down to WNH_MIN_SCALE.
+(defun wnh-write (wells ents / names anchor top bottom n0 oldsp x z base below delta e s y i b
+		  lay oldH topEdge blk floor room scale h sp wmax lim avail tight)
   ;; ents = list of the old name line TEXT enames; sort top first
-  (setq	ents   (vl-sort ents (function (lambda (a b) (> (cadr (wnh-tpt a)) (cadr (wnh-tpt b))))))
+  (setq	names  (mapcar 'car wells)
+	ents   (vl-sort ents (function (lambda (a b) (> (cadr (wnh-tpt a)) (cadr (wnh-tpt b))))))
 	anchor (car ents)
 	top    (cadr (wnh-tpt anchor))
 	bottom (cadr (wnh-tpt (last ents)))
 	x      (car (wnh-tpt anchor))
 	z      (caddr (wnh-tpt anchor))
 	n0     (length ents)
-	spacing	(if (> n0 1) (/ (- top bottom) (1- n0)) WNH_DEFAULT_SPACING)
-	delta  (* (- (length names) n0) spacing)
+	oldsp  (wnh-line-spacing ents)
   ) ;_ end of setq
 
   ;; Lines under the names: WELL(S) ... DRILLED, LS ... line, county
-  (setq below (wnh-lines-below anchor ents x bottom (* 3.5 spacing)))
+  (setq below (wnh-lines-below anchor ents x bottom (* 1.5 WNH_DEFAULT_SPACING)))
 
-  ;; New name lines, copied from the top selected line (minus any field)
-  (setq	base (vl-remove-if
-	       (function (lambda (p) (member (car p) '(-1 5 330 102 360))))
-	       (entget anchor)
-	     ) ;_ end of vl-remove-if
-	i    0
+  ;; New name lines, copied from the top line with a colour set (the new
+  ;; well colour), minus any field
+  (setq	base	(vl-remove-if
+		  (function (lambda (p) (member (car p) '(-1 5 330 102 360))))
+		  (entget (cond ((vl-some (function (lambda (e) (if (assoc 62 (entget e)) e))) ents))
+				(anchor)))
+		) ;_ end of vl-remove-if
+	lay	(wnh-dxf 410 base)
+	oldH	(cond ((wnh-dxf 40 (entget anchor))) (WNH_NAME_HEIGHT))
   ) ;_ end of setq
-  (foreach n names
-    (setq y (- top (* i spacing)) i (1+ i))
-    (entmake (subst (cons 1 n) (assoc 1 base)
-		    (subst (list 10 x y z) (assoc 10 base)
-			   (subst (list 11 x y z) (assoc 11 base) base))))
+  ;; entdel only works on the current tab
+  (if (/= (getvar "CTAB") lay) (setvar "CTAB" lay))
+  (setq
+	topEdge	(+ top (/ oldH 2.0))			; top of the first name stays put
+	blk	(wnh-block-bottom below (- bottom (/ oldH 2.0)))	; bottom of the whole header now
+	floor	(wnh-floor lay (append ents below) blk)
+	scale	1.0
+  ) ;_ end of setq
+
+  ;; Height: lines below keep their distance from the last name's bottom edge,
+  ;; so the header bottom = topEdge - (n-1)*sp - h - (gap from last name to blk)
+  (if floor
+    (progn
+      (setq room (- topEdge (- (- bottom (/ oldH 2.0)) blk) floor WNH_FIT_MARGIN)
+	    scale (min scale (/ room (+ WNH_NAME_HEIGHT (* (1- (length names)) WNH_DEFAULT_SPACING))))
+      ) ;_ end of setq
+    ) ;_ end of progn
+  ) ;_ end of if
+  ;; Width: the widest name must fit across the sheet
+  (setq	wmax  (apply 'max (mapcar (function (lambda (n) (wnh-text-width n base WNH_NAME_HEIGHT))) names))
+	lim   (wnh-layout-limits lay)
+  ) ;_ end of setq
+  (if (and lim wmax (> wmax 0.0))
+    (progn
+      (setq avail (- (* 2.0 (min (- x (car (car lim))) (- (car (cadr lim)) x))) (* 2.0 WNH_SIDE_MARGIN)))
+      (if (> wmax avail) (setq scale (min scale (/ avail wmax))))
+    ) ;_ end of progn
+  ) ;_ end of if
+  (if (< scale WNH_MIN_SCALE) (setq scale WNH_MIN_SCALE tight T))
+  (if WNH_FIT
+    (setq h  (* WNH_NAME_HEIGHT scale)
+	  sp (* WNH_DEFAULT_SPACING scale))
+    (setq h	oldH				; fitting off: keep page 1's size
+	  sp	oldsp
+	  scale	1.0
+	  tight	nil)
+  ) ;_ end of if
+  (setq
+	top   (- topEdge (/ h 2.0))
+	delta (+ (- bottom (- top (* (1- (length names)) sp))) (/ (- h oldH) 2.0))	; how far the lines below move down
+	i     0
+  ) ;_ end of setq
+
+  (foreach w wells
+    (setq y (- top (* i sp))
+	  i (1+ i)
+	  b (if (nth 5 w) (vl-remove (assoc 62 base) base) base)
+	  b (subst (cons 40 h) (assoc 40 b) b)
+    ) ;_ end of setq
+    (entmake (subst (cons 1 (car w)) (assoc 1 b)
+		    (subst (list 10 x y z) (assoc 10 b)
+			   (subst (list 11 x y z) (assoc 11 b) b))))
   ) ;_ end of foreach
   (foreach e ents (entdel e))
+  (setq *wnh-fit* (list scale h tight floor blk))
 
   ;; Move the lines underneath and fix WELL / WELLS
   (foreach e below
@@ -705,9 +1250,107 @@
     ) ;_ end of if
     (entmod e)
   ) ;_ end of foreach
-  (if (> (length names) n0)
-    (princ (strcat "\nHeader grew by " (itoa (- (length names) n0))
-		   " line(s) - check it still fits inside the page 1 box."))
+  (cond	(tight
+	 (princ (strcat "\nWNH: names shrunk to the smallest allowed size (" (rtos h 2 2)
+			") and the header still doesn't fit - check page 1."))
+	 (if (not WNH_TEST_PROPS)
+	   (alert (strcat "The well names are at the smallest size (" (rtos h 2 2) " high) and the header\n"
+			  "still runs into what's below it on page 1.\n\n"
+			  "Move the table / legend under the header down, or use the Multi Well page 1,\n"
+			  "then run WNH again - it will make the names as big as the space allows."))
+	 ) ;_ end of if
+	)
+	((< scale 0.999)
+	 (princ (strcat "\nWNH: names set to height " (rtos h 2 2) " (" (itoa (fix (+ 0.5 (* 100 scale))))
+			"% of standard) to fit the space on page 1.")))
+  ) ;_ end of cond
+) ;_ end of defun
+
+;;; Lowest edge of the header block: the lowest line underneath, or the
+;;; bottom of the names if there's nothing underneath
+(defun wnh-block-bottom	(below namesBottom / lo e)
+  (setq lo namesBottom)
+  (foreach en below
+    (setq e  (entget en)
+	  lo (min lo (- (cadr (wnh-tpt en)) (cond ((wnh-dxf 40 e)) (0.0))))
+    ) ;_ end of setq
+  ) ;_ end of foreach
+  lo
+) ;_ end of defun
+
+;;; The highest thing on the sheet that sits below the header (legend, tables,
+;;; boxes, viewports, notes ...): the floor the header must stay above.
+;;; Returns its top y, or nil if nothing is below.
+(defun wnh-floor (lay skip ceiling / ss i en e typ top lst floor lim)
+  (setq lim (wnh-layout-limits lay))
+  (if (setq ss (ssget "_X" (list (cons 410 lay))))
+    (progn
+      (setq i 0)
+      (while (< i (sslength ss))
+	(setq en (ssname ss i) i (1+ i) e (entget en) typ (wnh-dxf 0 e) top nil)
+	(if (and (not (member en skip))
+		 (or (null lim) (null (wnh-dxf 10 e))	; notes parked off the sheet don't count
+		     (wnh-inside (wnh-2d (wnh-dxf 10 e)) lim))
+		 (wnh-layer-prints-p (wnh-dxf 8 e)))	; nor do No Plot / off / frozen layers
+	  (cond	((= typ "VIEWPORT")
+		 (if (/= (wnh-dxf 69 e) 1)		; 1 = the sheet itself
+		   (setq top (+ (cadr (wnh-dxf 10 e)) (/ (wnh-dxf 41 e) 2.0)))))
+		((member typ '("TEXT" "MTEXT"))
+		 (setq top (+ (cadr (wnh-tpt en)) (cond ((wnh-dxf 40 e)) (0.0)))))
+		((member typ '("LINE" "LWPOLYLINE"))
+		 (setq lst nil)
+		 (foreach p e (if (member (car p) '(10 11)) (setq lst (cons (caddr p) lst))))
+		 (if lst (setq top (apply 'max lst))))
+		((member typ '("INSERT" "ACAD_TABLE" "POINT"))
+		 (setq top (cadr (wnh-dxf 10 e))))
+	  ) ;_ end of cond
+	) ;_ end of if
+	;; only things wholly below the header count
+	(if (and top (< top ceiling) (or (null floor) (> top floor)))
+	  (setq floor top *wnh-floor-ent* en)		; remembered for checking
+	) ;_ end of if
+      ) ;_ end of while
+    ) ;_ end of progn
+  ) ;_ end of if
+  floor
+) ;_ end of defun
+
+;;; Does this layer show up on the printed plan? Not if it's off, frozen, set
+;;; not to plot, Defpoints, or named like "No Plot".
+(defun wnh-layer-prints-p (name / e)
+  (and name
+       (not (wcmatch (strcase name) "DEFPOINTS,*NO PLOT*,*NOPLOT*,*NON-PLOT*"))
+       (setq e (tblobjname "LAYER" name))
+       (setq e (entget e))
+       (= 0 (logand 1 (cond ((wnh-dxf 70 e)) (0))))	; not frozen
+       (> (cond ((wnh-dxf 62 e)) (7)) 0)		; not off
+       (/= 0 (cond ((wnh-dxf 290 e)) (1)))		; plottable
+  ) ;_ end of and
+) ;_ end of defun
+
+;;; Width of a name at height h in the name lines' text style
+(defun wnh-text-width (str base h / tb)
+  (if (setq tb (textbox (list (cons 1 str) (cons 40 h)
+			      (cons 7 (cond ((wnh-dxf 7 base)) ("STANDARD")))
+			      (cons 41 (cond ((wnh-dxf 41 base)) (1.0))))))
+    (- (car (cadr tb)) (car (car tb)))
+    0.0
+  ) ;_ end of if
+) ;_ end of defun
+
+;;; Typical gap between the name lines (median, so a stray duplicate line
+;;; doesn't squash the header); the template spacing for a single line.
+(defun wnh-line-spacing	(ents / ys gaps g)
+  (setq ys (mapcar (function (lambda (e) (cadr (wnh-tpt e)))) ents))
+  (while (cdr ys)
+    (setq gaps (cons (- (car ys) (cadr ys)) gaps) ys (cdr ys))
+  ) ;_ end of while
+  (setq gaps (mapcar (function (lambda (i) (nth i gaps))) (vl-sort-i gaps '<)))	; vl-sort drops repeats
+  (if (and gaps
+	   (setq g (nth (/ (length gaps) 2) gaps))
+	   (> g (* 0.5 WNH_DEFAULT_SPACING)))
+    g
+    WNH_DEFAULT_SPACING
   ) ;_ end of if
 ) ;_ end of defun
 
@@ -716,16 +1359,36 @@
 ;;; (template examples parked off the sheet are ignored), then takes the TEXT
 ;;; lines centred under it in the same style as the first one, top down,
 ;;; stopping at the first line in another style (the WELL(S) ... DRILLED line).
-;;; Current layout is searched first. Returns (layoutName ename ...) or nil.
-(defun wnh-find-name-lines (/ lays lay found)
-  (setq lays (cons (getvar "CTAB") (vl-remove (getvar "CTAB") (wnh-layout-names))))
-  (while (and lays (not found))
-    (setq lay (car lays) lays (cdr lays))
-    (if (/= lay "Model")
-      (setq found (wnh-name-lines-in lay))
-    ) ;_ end of if
-  ) ;_ end of while
-  (if found (cons lay found))
+;;; Which layout: the current one if it's a page 1; else the only page 1; else
+;;; (a fresh template has several - Crown/Freehold, Single/Multi ...) you pick
+;;; from a numbered list, once per WNH run. Returns (layoutName ename ...) or nil.
+(defun wnh-find-name-lines (/ lay found cands n k)
+  (cond	((and *wnh-page1* (setq found (wnh-name-lines-in *wnh-page1*)))
+	 (setq lay *wnh-page1*))
+	((and (/= (getvar "CTAB") "Model") (setq found (wnh-name-lines-in (getvar "CTAB"))))
+	 (setq lay (getvar "CTAB")))
+	(T
+	 (foreach l (wnh-layout-names)
+	   (if (and (/= l "Model") (wnh-name-lines-in l)) (setq cands (append cands (list l))))
+	 ) ;_ end of foreach
+	 (cond ((null cands))
+	       ((or (null (cdr cands)) WNH_TEST_PROPS) (setq lay (car cands)))
+	       (T
+		(princ "\nMore than one page 1 layout in this drawing:")
+		(setq n 0)
+		(foreach l cands (princ (strcat "\n  " (itoa (setq n (1+ n))) ". " l)))
+		(setq k 0)
+		(while (not (<= 1 k n))
+		  (initget 6)			; no zero / negative
+		  (setq k (cond ((getint (strcat "\nWhich one gets the well names? [1-" (itoa n) "] <1>: "))) (1)))
+		  (if (> k n) (princ "\nPick a number from the list."))
+		) ;_ end of while
+		(setq lay (nth (1- k) cands)))
+	 ) ;_ end of cond
+	 (if lay (setq found (wnh-name-lines-in lay)))
+	)
+  ) ;_ end of cond
+  (if found (progn (setq *wnh-page1* lay) (cons lay found)))
 ) ;_ end of defun
 
 (defun wnh-layout-names (/ lst)
@@ -784,6 +1447,7 @@
 	(setq p (wnh-tpt e))
 	(cond ((not gap))			; already stopped
 	      ((> (- prevY (cadr p)) gap) (setq gap nil))	; too far down
+	      ((not (wnh-name-line-p (wnh-dxf 1 (entget e)))) (setq gap nil))	; not a well name
 	      ((null style)
 	       (setq style (wnh-dxf 7 (entget e)) lst (list e) prevY (cadr p)
 		     gap (* 1.5 WNH_DEFAULT_SPACING)))
@@ -796,6 +1460,13 @@
   (reverse lst)
 ) ;_ end of defun
 
+;;; Does this text look like a well name line? It must end in a location
+;;; (5-18-59-24) or the template placeholder (X-XX-XX-XX). Keeps WNH off
+;;; other "PLAN SHOWING" pages such as the Participant Involvement Map.
+(defun wnh-name-line-p (s)
+  (and s (wcmatch (strcase (vl-string-trim " " s)) "*#-#*-#*-#*,*X-XX-XX-XX"))
+) ;_ end of defun
+
 (defun wnh-ss->list (ss / i lst)
   (if ss
     (progn
@@ -806,8 +1477,10 @@
   lst
 ) ;_ end of defun
 
-;;; Text in the same layout, centred on the same x, within dist under bottom
-(defun wnh-lines-below (anchor ents x bottom dist / lay ss i e p lst)
+;;; Text in the same layout, centred on the same x, under the names: followed
+;;; down line by line (WELL(S) DRILLED, LS line, county), stopping at the first
+;;; gap bigger than dist - so it works whatever size the names are.
+(defun wnh-lines-below (anchor ents x bottom dist / lay ss i e p cands prevY lst)
   (setq lay (wnh-dxf 410 (entget anchor)))
   (if (setq ss (ssget "_X" (list '(0 . "TEXT,MTEXT") (cons 410 lay))))
     (progn
@@ -816,11 +1489,17 @@
 	(setq e (ssname ss i) i (1+ i) p (wnh-tpt e))
 	(if (and (not (member e ents))
 		 (equal (car p) x 1.0)
-		 (< (cadr p) bottom)
-		 (> (cadr p) (- bottom dist)))
-	  (setq lst (cons e lst))
+		 (< (cadr p) bottom))
+	  (setq cands (cons e cands))
 	) ;_ end of if
       ) ;_ end of while
+      (setq prevY bottom)
+      (foreach e (vl-sort cands (function (lambda (a b) (> (cadr (wnh-tpt a)) (cadr (wnh-tpt b))))))
+	(if (and prevY (<= (- prevY (cadr (wnh-tpt e))) dist))
+	  (setq lst (cons e lst) prevY (cadr (wnh-tpt e)))
+	  (setq prevY nil)				; gap too big - stop
+	) ;_ end of if
+      ) ;_ end of foreach
     ) ;_ end of progn
   ) ;_ end of if
   lst

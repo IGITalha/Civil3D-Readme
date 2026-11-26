@@ -104,10 +104,14 @@ These are the client styles we follow. They're not AER rules, but they fit withi
 |---|---|---|---|
 | **Cenovus (CVE)** | Always shows `100` | `102`, `103` | `CVE 100 HZ PELICAN 1-17-79-24` |
 | **Tourmaline** | UWI left out | `102`, `103` | `TOURMALINE HZ LELAND 3-26-57-27` |
+| **Whitecap** | UWI left out (AER list: 0 of 471) | `102`, `103` | `WHITECAP 102 HZ PEMBINA 1-25-49-11` (short form `WCP`) |
+| **Acerta** | UWI left out | `102`, `103` | `ACERTA 102 HZ PEMBINA 13-17-48-5` (`AOC` on older licences) |
+
+The Whitecap and Acerta rows come from the AER ST37 well list (wells spudded 2022 onward), not the IGI sheet. In `WNH` these styles live in the `WNH_CLIENTS` table at the top of the file.
 
 - `HZ` = horizontal, `DD` = directional, blank for a vertical well.
 - If the name is over 36 characters, shorten the operator and/or the field/strike area using the AER abbreviations.
-- New well centre names are shown in blue. Tourmaline also wants existing well names shown in black.
+- New well centre names are shown in blue. **Only Tourmaline** lists the existing wells on the pad, in black (confirmed with the manager, November 2026). Cenovus always shows `100`.
 
 ## 6. How `WNH` applies these rules
 
@@ -115,14 +119,16 @@ These are the client styles we follow. They're not AER rules, but they fit withi
 |---|---|
 | 36 characters and spaces | Counts each name and flags it if over |
 | (a) Licensee | Operator drawing property; asks if it's still the template placeholder |
-| (b) UWI | `100` unless a `Bottom Hole 102/…` label says otherwise. Warns if an AER bottom hole is already in the same LSD, since it may need to be 102. Leaves out `100` except for operators in `WNH_ALWAYS_SHOW_UWI` (currently CVE). |
+| (b) UWI | Wells on the pad that end in the same LSD get `100`, `102`, `103`…, with existing wells first since they were licensed first. A `Bottom Hole 102/…` label overrides this. Warns if an AER bottom hole from another pad is already in the LSD, since it may need to be 102. Leaves out `100` except for clients with *Show 100* in `WNH_CLIENTS` (currently CVE). |
 | (b) HZ / DD | `HZ or DD` drawing property; asks on a fresh drawing |
-| (c) Field / strike area | Strike Area drawing property, checked against the AER Map-94 list. A full name is changed to its abbreviation, and unknown values are flagged. Lists nearby fields as a hint. |
+| (c) Field / strike area | **Looked up for each bottom-hole section** from `LISP/Well Name Header - Strike Areas.txt`, which is built from the AER Order System (BOS) tract tables. A field order wins over a strike area. Sections split between two areas get a warning. The **Strike areas** option at the Yes/No prompt overrides the lookup for any section, and the Strike Area property is only used where the lookup finds nothing. |
+| Existing wells on the pad | The AER survey lines (`ERCB Wells - Directional_Lines`) that start within 100 m of a new well centre are always counted for 100/102 numbering, and are listed under the new wells (in black) for clients with *Existing* in `WNH_CLIENTS` (currently Tourmaline). Exact copies and lines that duplicate a new well are skipped. A hand-drawn path and an AER survey of the same well are counted once, using the drawn path's end, with a warning if the two end in different LSDs. |
 | (d) Bottom hole LS-SEC-TWP-RGE | Worked out from the far end of each `Drill Path` and the section labels |
 | Horizontal = longest leg's bottom hole | Uses the end of each drill path |
 | Road allowance (`S`/`W` codes) | **Not detected.** It warns when a bottom hole is within 25 m of an LSD line, which includes road allowances. |
 | MIM / GT wells | Not handled; type them in by hand |
-| Field vs strike area choice | Not decided automatically; it needs the strike area map |
+| Field vs strike area choice | Automatic: field orders win. "Adjacent to a field" (13.020(2)(c)(i)) is not checked, and split sections are flagged for you to decide. |
+| Vertical existing wells | Not picked up, because they have no directional line. Add them by hand. |
 
 ## Sources
 
@@ -130,4 +136,5 @@ These are the client styles we follow. They're not AER rules, but they fit withi
 - [AER Directive 056: Energy Development Applications and Schedules](https://static.aer.ca/prd/documents/directives/directive-056.pdf): s. 7.7.2 Well Names (October 2026 edition)
 - [AER Unique Well Identifiers](https://static.aer.ca/prd/documents/applications/UWI-Description.pdf) (March 2023)
 - [AER Map-94: Map of Alberta Strike Areas](https://www1.aer.ca/ProductCatalogue/188.html): [zip download](https://www.aer.ca/documents/catalog/Map94_Strike_Areas.zip), Field Strike Lists YE2026
+- [AER Order System (BOS) data](https://www1.aer.ca/ProductCatalogue/343.html): [zip download](https://www.aer.ca/data/shapefiles/AER_Order_System_SHP.zip) (monthly). `Admin_Field_Tract.txt` and `Admin_Strike_Area_Tract.txt` give every section's field and strike area. `tools/build_strike_tracts.py` turns them into `LISP/Well Name Header - Strike Areas.txt`.
 - IGI Drafting Procedure Manual (UWI / strike area notes) and the IGI well naming convention sheet
