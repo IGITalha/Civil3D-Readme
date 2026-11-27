@@ -33,12 +33,16 @@ Also copy **`Well Name Header - Strike Areas.txt`** into a folder on the AutoCAD
 1. Open the job drawing. You can be on any tab, including Model.
 2. Type `WNH`.
 3. Answer any questions about properties that are still on their template values (see section 2).
-4. Read the list of names it shows, including any **!** warnings.
-5. At `Write these names onto page 1? [Yes/No/Strike areas] <Yes>`, choose one:
-   - **Yes** writes the names onto page 1.
-   - **No** stops without changing anything.
-   - **Strike areas** asks for a strike area for each bottom-hole section, then shows the list again. Use this when some wells end in a different strike area.
-6. Check page 1. One `U` (undo) reverses everything WNH did.
+4. A **Well Name Header** window opens with:
+   - the names, top to bottom, with their character counts. Existing wells are marked `existing`.
+   - a **Notes** box with any **!** warnings, the date of the strike data, and the surface LS.
+5. To change the order, click a name and use **Move Up** / **Move Down**.
+6. Click **Write to page 1**, or **Cancel** (or Esc) to stop without changing anything.
+7. Check page 1. One `U` (undo) reverses everything WNH did.
+
+If the window can't open for some reason, WNH falls back to an alert and asks for the order on the command line instead: type the numbers, e.g. `3 1 2`, or press Enter.
+
+Next time you run WNH, the list starts in page 1's current order, so your order is kept.
 
 ---
 
@@ -52,8 +56,8 @@ Also copy **`Well Name Header - Strike Areas.txt`** into a folder on the AutoCAD
 | 4. Find existing wells | Reads the AER survey lines that start on the pad (see section 3). They always count for 100/102 numbering, but they're only listed on page 1 for clients set to list them (Tourmaline). |
 | 5. Assign UWIs | Wells that end in the same LSD get 100, 102, 103, with existing wells first. |
 | 6. Build names | Looks up the strike area of each bottom-hole section (see section 7), then joins Operator + UWI + HZ/DD + strike area + LS-SEC-TWP-RGE. It counts the characters and flags anything over 36. |
-| 7. Order lines | If page 1 already lists every well, it keeps that order. Otherwise new wells come first, in ELEVATIONS note order, then existing wells. |
-| 8. Show list | Names, character counts, warnings, and the surface LS, all in one alert. |
+| 7. Suggest an order | If page 1 already lists every well, it uses that order. Otherwise new wells come first, in ELEVATIONS note order, then existing wells. |
+| 8. Show the window | Names with character counts, plus a Notes box (warnings, strike data date, surface LS). You set the order with Move Up / Move Down, then Write to page 1 or Cancel. |
 | 9. Find page 1 | Uses the current tab if it's a page 1, else the only page 1. If the drawing has several (a fresh template has Crown/Freehold, Single/Multi …), it lists them and asks you to pick a number, once per run. |
 | 10. Write | Replaces the name lines in page 1's current height and spacing, moves the lines below to suit, and fixes WELL/WELLS. Fitting to the space can be turned on (see "Fitting the header" below). |
 | 11. Update properties | Fills in the Sur and BH drawing properties and runs `UPDATEFIELD`, so the LS line and other fields match. |
@@ -154,7 +158,7 @@ Existing wells are always used for 100/102 numbering. They are only **listed** o
 1. Wells are grouped by the LSD their bottom hole is in.
 2. **Existing** wells are numbered first (they were licensed first), from the south wellhead to the north: 100, then 102, 103…
 3. **New** wells then take the next free number in their LSD, so a new well ending in an LSD that already has an existing well gets **102**. The list says why.
-4. A `Bottom Hole 102/…` label, or a UWI drawing property other than 100, overrides this.
+4. A `Bottom Hole 102/…` label overrides this. The **UWI drawing property is not used** for drill-path wells: it's one value for the whole drawing, so on a pad it would put 102 on every well.
 5. In the name, `100` is left out, e.g. `TOURMALINE HZ …`, except for clients with *Show 100* = `T` in the client table (CVE shows `100`).
 
 ---
@@ -180,14 +184,13 @@ For each well, WNH looks up the **bottom hole's section** and uses that area's a
 If WNH can't find the file, it says so in the alert and uses the Strike Area property as before.
 
 For each well, the strike area is taken from the first of these that applies:
-1. What you typed with the **Strike areas** option during this run.
-2. The **AER lookup** for the bottom-hole section. A designated **field** wins over a strike area, as OGCR 13.020 requires.
-3. Page 1, if it already shows more than one strike area.
-4. The **Strike Area** drawing property.
+1. The **AER lookup** for the bottom-hole section. A designated **field** wins over a strike area, as OGCR 13.020 requires.
+2. Page 1, if it already shows more than one strike area.
+3. The **Strike Area** drawing property.
 
 Notes:
 - If the Strike Area property is still `STRIKE` on a fresh drawing, it's filled in from the lookup instead of being asked. After writing, the property is set to the first well's strike area.
-- About 1,900 sections in Alberta are **split between two areas**. For a bottom hole in one of those, WNH uses page 1's choice if it's one of the two, otherwise the first one, and shows a warning. Check the strike area map, and use **Strike areas** to change it if needed.
+- About 1,900 sections in Alberta are **split between two areas**. For a bottom hole in one of those, WNH uses page 1's choice if it's one of the two, otherwise the first one, and shows a warning. Check the strike area map. If it's the other area, fix that name on page 1 by hand; WNH keeps your choice the next time it runs.
 
 **Where the data comes from:** the AER Order System (BOS) data, which the AER updates monthly. The alert shows the date the table was built. To refresh it:
 1. Download https://www.aer.ca/data/shapefiles/AER_Order_System_SHP.zip and unzip it.
@@ -203,7 +206,7 @@ Notes:
 | Operator | Read (asked if placeholder) | First part of the name |
 | HZ or DD | Read (asked on a fresh drawing) | `HZ`, `DD` or blank |
 | Strike Area | Read (asked if placeholder; full name changed to its abbreviation) | Strike area in the name |
-| UWI | Read | Used only if it isn't blank or 100 |
+| UWI | Read only when there are no drill paths (one well from the BH properties) | Ignored for drill-path wells; see section 6 |
 | Sur LS / Sur Sec / Sur Twp / Sur Rge / Mer | **Written** | Surface location of the first well, for the LS line fields |
 | BH LS / BH Sec / BH Twp / BH Rge | **Written** (read as a fallback) | Bottom hole of the first well on page 1 |
 
@@ -292,5 +295,5 @@ Checked against the AER **ST37 well list** (wells spudded 2022 onward, data as o
 | Wrong LS / Sec | Check that the `10-Section Labels` are present and placed at the section centres. |
 | An existing well is missing | Check that its AER line starts within 100 m of the new well centres, or whether it's a vertical well. |
 | An extra existing well appears | Another well's AER line starts on the pad. Delete that name line afterwards, or lower `WNH_PAD_RADIUS`. |
-| Wrong strike area for some wells | Check whether the section is split (there will be a warning), or whether the table is out of date (refresh it, see section 7). For a one-off fix, run WNH again and choose **Strike areas**. |
-| Lines in the wrong order | Fix the order by hand on page 1. WNH keeps that order next time, as long as every well is already listed. |
+| Wrong strike area for some wells | Check whether the section is split (there will be a warning), or whether the table is out of date (refresh it, see section 7). For a one-off fix, edit the name on page 1 by hand. |
+| Lines in the wrong order | Run WNH again and use Move Up / Move Down in the window. |

@@ -18,18 +18,19 @@
 ;;;   (clients with Existing = T)         Directional_Lines") starting on the
 ;;;                                       pad; listed under the new ones, black
 ;;;   UWI                              -> nearby "Bottom Hole 102/5-18" label or
-;;;                                       UWI property; otherwise wells ending
+;;;                                       (not the UWI property); wells ending
 ;;;                                       in the same LSD get 100, 102, 103...
 ;;;                                       (existing wells first)
 ;;;   Strike area per well             -> looked up from the bottom hole
 ;;;                                       section in "Well Name Header -
 ;;;                                       Strike Areas.txt" (AER order data,
-;;;                                       field wins); Strike option
-;;;                                       overrides; property if not found
-;;;   Line order                       -> kept as on page 1 when every well is
-;;;                                       already there; else new wells in the
-;;;                                       ELEVATIONS note order (else wellhead
-;;;                                       north to south), then existing wells
+;;;                                       field wins); property if not found
+;;;   Line order                       -> Move Up / Down in the dialog;
+;;;                                       listed as on page 1 when every well
+;;;                                       is already there; else new wells in
+;;;                                       the ELEVATIONS note order (else
+;;;                                       wellhead north to south), then
+;;;                                       existing wells
 ;;; Fallbacks: no drill paths -> "Bottom Hole" labels (Twp/Rge from ATS
 ;;; quarter labels or BH props); nothing at all -> one line from BH props.
 ;;;
@@ -37,7 +38,8 @@
 ;;; disagrees, AER bottom hole already in the LSD (UWI may need 102), well
 ;;; centres in more than one LS.
 ;;;
-;;; Usage: type WNH (from any tab), check the names it lists, answer Yes.
+;;; Usage: type WNH (from any tab). A dialog lists the names with any notes;
+;;; use Move Up / Move Down to change the order, then Write to page 1.
 ;;; It finds page 1 by itself: the "PLAN SHOWING ..." title that sits on the
 ;;; sheet of a layout, and the big name lines straight under it. Those are
 ;;; replaced in the same style/spot, the lines underneath (WELL(S) ...
@@ -107,7 +109,7 @@
 
 ;;;=============================================================================
 ;;; Main command
-(defun c:WNH (/ *error* wells names ss ans)
+(defun c:WNH (/ *error* wells names ss msg res)
   (defun *error* (msg)
     (if	(not (wcmatch (strcase msg) "*CANCEL*,*QUIT*,*EXIT*"))
       (princ (strcat "\nWNH error: " msg))
@@ -117,20 +119,26 @@
   ) ;_ end of defun
 
   (setvar "CMDECHO" 0)
-  (setq *wnh-strike-map* nil *wnh-strike-file* nil *wnh-page1* nil)
+  (setq *wnh-strike-file* nil *wnh-page1* nil)
   (wnh-ensure-props)
 
-  (setq ans "Strike")
-  (while (= ans "Strike")
-    (setq wells	(wnh-get-wells)
-	  names	(mapcar 'car wells)
-    ) ;_ end of setq
-    (wnh-report wells)
-    (initget "Yes No Strike")
-    (setq ans (getkword "\nWrite these names onto page 1? [Yes/No/Strike areas] <Yes>: "))
-    (if (= ans "Strike") (wnh-ask-strikes wells))
-  ) ;_ end of while
-  (if (= ans "No") (exit))
+  ;; Show the names in a dialog: reorder with Move Up / Down, then Write or
+  ;; Cancel. If the dialog can't open, fall back to an alert + command line.
+  (setq	wells (wnh-get-wells)
+	msg   (wnh-report wells)
+	res   (if WNH_TEST_PROPS 'nodlg (wnh-order-dialog wells))
+  ) ;_ end of setq
+  (cond	((null res) (princ "\nWNH cancelled - page 1 not changed.") (exit))
+	((= res 'nodlg)
+	 (if (not WNH_TEST_PROPS)
+	   (alert (strcat "Well names for page 1:\n" msg
+			  "\n\nNext, on the command line: type the order for page 1, top to bottom"
+			  "\n(e.g. 2 1 3), or press Enter to keep this order. Esc cancels."))
+	 ) ;_ end of if
+	 (setq wells (wnh-ask-order wells)))
+	(T (setq wells res))
+  ) ;_ end of cond
+  (setq names (mapcar 'car wells))
 
   ;; Find the name lines under the page 1 title; ask only if they can't be found
   (if (setq ss (wnh-find-name-lines))
@@ -174,8 +182,7 @@
 ;;;      existing wells on the pad (AER survey lines) for clients with Existing = T
 ;;;   2. "Bottom Hole 100/5-18" labels
 ;;;   3. BH drawing properties (one well)
-;;; Strike area: the Strike Area property, except for sections given another
-;;; one with the Strike option, or already shown with another one on page 1.
+;;; Strike area: looked up per bottom hole section (wnh-strike-for).
 (defun wnh-get-wells (/ op typ strike paths secs bhs ats out tr fromProps smap s sl)
   (setq	op     (wnh-prop "Operator")
 	typ    (wnh-prop "HZ or DD")
@@ -229,24 +236,23 @@
 
 ;;;=============================================================================
 ;;; Strike area for one well: (abbreviation warning...)
-;;;   1. what you typed with the Strike option this run
-;;;   2. the AER order data for the bottom hole section (field wins over
+;;;   1. the AER order data for the bottom hole section (field wins over
 ;;;      strike area); a split section takes the page 1 choice if it's one
 ;;;      of the areas, else the first, with a warning
-;;;   3. page 1, when it already shows more than one strike area
-;;;   4. the Strike Area drawing property
+;;;   2. page 1, when it already shows more than one strike area
+;;;   3. the Strike Area drawing property
 (defun wnh-strike-for (bh tr strike smap / skey mer look prev)
   (setq	skey (strcat (nth 3 bh) "-" (car tr) "-" (cadr tr))
 	mer  (cond ((if (nth 9 bh) (nth 4 (nth 9 bh)))) ((wnh-prop "Mer")))
 	look (wnh-tract-strikes (nth 3 bh) (car tr) (cadr tr) mer)
 	prev (cdr (assoc skey smap))
   ) ;_ end of setq
-  (cond	((cdr (assoc skey *wnh-strike-map*)) (list (cdr (assoc skey *wnh-strike-map*))))
-	((= (length look) 1) (list (car look)))
+  (cond	((= (length look) 1) (list (car look)))
 	(look
 	 (list (if (member prev look) prev (car look))
 	       (strcat "Sec " skey " is split between " (wnh-join look)
-		       " - check the strike area map (Strike areas option to change)")))
+		       " - check the strike area map; fix the name on page 1 if needed"
+		       " (WNH keeps it next time)")))
 	(prev (list prev))
 	(T (list strike))
   ) ;_ end of cond
@@ -388,7 +394,7 @@
 ;;;=============================================================================
 ;;; Turn drill paths into well records:
 ;;; (key uwi ls sec twp rge bhPoint warnings surLegal bhLegal existing surPoint)
-;;; uwi is nil unless a label or the UWI property gives one; wnh-assign-uwis
+;;; uwi is nil unless a Bottom Hole label gives one; wnh-assign-uwis
 ;;; fills in the rest.
 (defun wnh-wells-from-paths (paths secs / labels out bh sur lab uwi warn)
   (setq labels (wnh-get-bottom-holes))
@@ -397,8 +403,10 @@
 	  bh   (wnh-legal-at (cadr p) secs)
 	  warn nil
 	  lab  (wnh-nearest-label (cadr p) labels 600.0)
-	  uwi  (cond ((cadr lab))
-		     ((not (member (wnh-prop "UWI") '("" "100"))) (wnh-prop "UWI")))
+	  ;; Only a "Bottom Hole 102/..." label sets the UWI here. The UWI drawing
+	  ;; property is one value for the whole drawing, so on a multi-well pad
+	  ;; it would put 102 on every well - wnh-assign-uwis works it out instead.
+	  uwi  (cadr lab)
     ) ;_ end of setq
     (setq warn (wnh-edge-warning bh))
     (if	(and lab (not (and (= (nth 2 lab) (car bh)) (= (nth 3 lab) (cadr bh)))))
@@ -522,8 +530,8 @@
 ;;;=============================================================================
 ;;; UWI for each well: wells ending in the same LSD get 100, 102, 103 ...
 ;;; Existing wells take theirs first (they were licensed first), ordered by
-;;; wellhead south to north; then the new wells. A UWI from a label or the
-;;; UWI property is kept. Sets the key (uwi/ls-sec) used for ordering.
+;;; wellhead south to north; then the new wells. A UWI from a "Bottom Hole
+;;; 102/..." label is kept. Sets the key (uwi/ls-sec) used for ordering.
 (defun wnh-assign-uwis (wells secs / aer taken lsd used uwi warn out)
   (setq aer (wnh-aer-bottom-holes))
   (foreach w (append (wnh-sort-by-y (vl-remove-if-not (function (lambda (w) (nth 10 w))) wells) T)
@@ -1009,34 +1017,52 @@
   ) ;_ end of if
 ) ;_ end of defun
 
-;;; Strike option: ask for the strike area of each bottom hole section.
-;;; Enter keeps what is shown. Answers last until the command ends.
-(defun wnh-ask-strikes (wells / keys k cur v chk toks)
-  (foreach w wells
-    (if (setq k (nth 4 w))
-      (progn
-	(setq k (strcat (nth 1 k) "-" (nth 2 k) "-" (nth 3 k)))
-	(if (not (assoc k keys))
-	  (setq toks (wnh-split (car w) " ")
-		keys (append keys (list (cons k (nth (- (length toks) 2) toks)))))
+;;; Ask for the order of the lines on page 1. The names are listed numbered
+;;; (see wnh-report); type the numbers top to bottom, e.g. "3 1 2" or "3,1,2".
+;;; Enter keeps the order shown. Numbers left out follow in their shown order.
+(defun wnh-ask-order (wells / n s nums ok out)
+  (setq n (length wells))
+  (if (or (< n 2) WNH_TEST_PROPS)
+    wells
+    (progn
+      (while (not ok)
+	(setq s (getstring T (strcat "
+Order of the names on page 1, top to bottom - type the numbers"
+				      " (e.g. 2 1 3), Enter = as shown: ")))
+	(setq nums (wnh-parse-order s n))
+	(if (= nums 'bad)
+	  (princ (strcat "
+Use each number 1-" (itoa n) " once, separated by spaces or commas."))
+	  (setq ok T)
 	) ;_ end of if
-      ) ;_ end of progn
+      ) ;_ end of while
+      (if nums
+	(progn
+	  (setq out (mapcar (function (lambda (i) (nth (1- i) wells))) nums))
+	  (foreach w wells (if (not (member w out)) (setq out (append out (list w)))))
+	  (princ "
+New order:")
+	  (foreach w out (princ (strcat "
+   " (car w))))
+	  out
+	) ;_ end of progn
+	wells
+      ) ;_ end of if
+    ) ;_ end of progn
+  ) ;_ end of if
+) ;_ end of defun
+
+;;; "3 1, 2" -> (3 1 2);  "" -> nil;  anything invalid -> 'bad
+(defun wnh-parse-order (s n / toks nums bad i)
+  (setq toks (wnh-split (vl-string-trim " " (wnh-replace-all s "," " ")) " "))
+  (foreach tk toks
+    (setq i (atoi tk))
+    (if (or (/= tk (itoa i)) (< i 1) (> i n) (member i nums))
+      (setq bad T)
+      (setq nums (append nums (list i)))
     ) ;_ end of if
   ) ;_ end of foreach
-  (if (null keys) (princ "\nNo bottom hole sections worked out - set the Strike Area drawing property instead."))
-  (foreach k keys
-    (setq cur (cdr k)
-	  v   (getstring T (strcat "\nStrike area for wells ending in Sec " (car k) " <" cur ">: "))
-    ) ;_ end of setq
-    (if	(/= "" (setq v (vl-string-trim " " v)))
-      (progn
-	(setq chk (wnh-check-strike v))
-	(if (cadr chk) (princ (strcat "\n  " (cadr chk))))
-	(setq *wnh-strike-map* (cons (cons (car k) (car chk))
-				     (vl-remove (assoc (car k) *wnh-strike-map*) *wnh-strike-map*)))
-      ) ;_ end of progn
-    ) ;_ end of if
-  ) ;_ end of foreach
+  (if bad 'bad nums)
 ) ;_ end of defun
 
 ;;; New wells: order of the page 1 ELEVATIONS note, else wellhead north first.
@@ -1096,19 +1122,23 @@
 
 
 ;;;=============================================================================
-;;; Show the names on the command line and in an alert
-(defun wnh-report (wells / msg anyProps w n surs s)
-  (setq msg "")
+;;; Report and order dialog
+;;; One row of the name list: name, length and flags
+(defun wnh-name-row (w / n)
+  (setq n (car w))
+  (strcat n "   (" (itoa (strlen n)) ")"
+	  (if (nth 5 w) "  existing" "")
+	  (if (and (/= (wnh-prop "Operator") "")
+		   (/= (car (wnh-split n " ")) (strcase (wnh-prop "Operator"))))
+	    "  (short form - full name over 36)" "")
+	  (if (> (strlen n) WNH_MAX_LENGTH) "  <-- OVER 36!" "")
+	  (if (cadr w) "  *" ""))
+) ;_ end of defun
+
+;;; Notes for the list: each well's warnings, then general notes
+(defun wnh-notes (wells / lst anyProps surs s)
   (foreach w wells
-    (setq n (car w))
-    (setq msg (strcat msg "\n" n "   (" (itoa (strlen n)) ")"
-		      (if (nth 5 w) "  existing" "")
-		      (if (and (/= (wnh-prop "Operator") "")
-			       (/= (car (wnh-split n " ")) (strcase (wnh-prop "Operator"))))
-			"  (short form - full name over 36)" "")
-		      (if (> (strlen n) WNH_MAX_LENGTH) "  <-- OVER 36!" "")
-		      (if (cadr w) "  *" "")))
-    (foreach x (nth 2 w) (setq msg (strcat msg "\n      ! " x)))
+    (foreach x (nth 2 w) (setq lst (append lst (list (strcat "! " (car w) ": " x)))))
     (if (cadr w) (setq anyProps T))
     (if (setq s (nth 3 w))
       (setq s (strcat "LS " (nth 0 s) " Sec " (nth 1 s) " Twp " (nth 2 s) " Rge " (nth 3 s) " W" (nth 4 s) "M"))
@@ -1116,30 +1146,136 @@
     (if (and s (not (member s surs))) (setq surs (append surs (list s))))
   ) ;_ end of foreach
   (if (cadr (setq s (wnh-check-strike (wnh-prop "Strike Area"))))
-    (setq msg (strcat msg "\n\n! " (cadr s)))
+    (setq lst (append lst (list (strcat "! " (cadr s)))))
   ) ;_ end of if
   (if (and (/= (wnh-prop "Operator") "") (not (wnh-client (wnh-prop "Operator"))))
-    (setq msg (strcat msg "\n\n! Operator " (wnh-prop "Operator")
-		      " isn't in the client table (WNH_CLIENTS) - using defaults: no 100, new wells only."))
+    (setq lst (append lst (list (strcat "! Operator " (wnh-prop "Operator")
+					" isn't in the client table (WNH_CLIENTS) - using defaults: no 100, new wells only."))))
   ) ;_ end of if
-  (setq msg (strcat msg "\n\n"
-		    (if (wnh-strike-file)
-		      (strcat "Strike areas looked up from each bottom hole section (AER order data "
-			      (cond (*wnh-strike-date*) ("")) ").")
-		      "Strike area lookup file (Well Name Header - Strike Areas.txt) not found - using the Strike Area property.")))
+  (setq lst (append lst
+		    (list (if (wnh-strike-file)
+			    (strcat "Strike areas looked up from each bottom hole section (AER order data "
+				    (cond (*wnh-strike-date*) ("")) ").")
+			    "Strike area lookup file (Well Name Header - Strike Areas.txt) not found - using the Strike Area property."))))
   (if surs
-    (setq msg (strcat msg "\n\nSurface: " (car surs)
-		      (if (cdr surs) "\n   ! Well centres are in more than one LS - check the surface line." "")))
+    (setq lst (append lst (list (strcat "Surface: " (car surs)))
+		      (if (cdr surs) (list "! Well centres are in more than one LS - check the surface line."))))
   ) ;_ end of if
   (if anyProps
-    (setq msg (strcat msg "\n\n* Twp/Rge taken from the BH drawing properties (no ATS quarter labels found)."
-		      "\n   Check any bottom hole that is in a different township or range."))
+    (setq lst (append lst (list "* Twp/Rge taken from the BH drawing properties (no ATS quarter labels found)."
+				"  Check any bottom hole that is in a different township or range.")))
   ) ;_ end of if
+  lst
+) ;_ end of defun
+
+;;; Print the numbered list and notes on the command line; returns the text
+(defun wnh-report (wells / msg k)
+  (setq msg "" k 0)
+  (foreach w wells
+    (setq msg (strcat msg "\n" (itoa (setq k (1+ k))) ".  " (wnh-name-row w)))
+  ) ;_ end of foreach
+  (setq msg (strcat msg "\n"))
+  (foreach x (wnh-notes wells) (setq msg (strcat msg "\n" x)))
   (princ (strcat "\n\nWell names:" msg "\n"))
-  (if (not WNH_TEST_PROPS)
-    (alert (strcat "Well names for page 1:\n" msg
-		   "\n\nNext: Yes writes them onto page 1."
-		   "\nStrike areas lets you give some sections a different strike area."))
+  msg
+) ;_ end of defun
+
+;;; The page 1 dialog: names in order with Move Up / Move Down, the notes
+;;; underneath, and Write to page 1 / Cancel. Returns the wells in the chosen
+;;; order, nil if cancelled, or 'nodlg if the dialog couldn't be shown.
+;;; The .dcl is written to a temp file each time, so there's only the .lsp.
+(defun wnh-order-dialog (wells / fn id res)
+  (setq	*wnh-dlg-wells*	wells
+	fn		(wnh-dcl-file)
+	id		(if fn (vl-catch-all-apply 'load_dialog (list fn)))
+  ) ;_ end of setq
+  (if (and (numberp id) (> id 0) (new_dialog "wnh_order" id))
+    (progn
+      (wnh-dlg-fill 0)
+      (start_list "notes")
+      (mapcar 'add_list (wnh-notes wells))
+      (end_list)
+      (action_tile "up" "(wnh-dlg-move -1)")
+      (action_tile "down" "(wnh-dlg-move 1)")
+      (action_tile "accept" "(done_dialog 1)")
+      (action_tile "cancel" "(done_dialog 0)")
+      (setq res (start_dialog))
+      (unload_dialog id)
+      (vl-file-delete fn)
+      (if (= res 1) *wnh-dlg-wells*)
+    ) ;_ end of progn
+    (progn
+      (if (and (numberp id) (> id 0)) (unload_dialog id))
+      (if fn (vl-file-delete fn))
+      'nodlg
+    ) ;_ end of progn
+  ) ;_ end of if
+) ;_ end of defun
+
+(defun wnh-dlg-fill (sel / k)
+  (setq k 0)
+  (start_list "names")
+  (foreach w *wnh-dlg-wells* (add_list (strcat (itoa (setq k (1+ k))) ". " (wnh-name-row w))))
+  (end_list)
+  (set_tile "names" (itoa sel))
+) ;_ end of defun
+
+;;; Move the selected line up (d = -1) or down (d = 1)
+(defun wnh-dlg-move (d / s sel to)
+  (setq s (get_tile "names"))
+  (if (/= s "")
+    (progn
+      (setq sel	(atoi s)
+	    to	(+ sel d)
+      ) ;_ end of setq
+      (if (and (>= to 0) (< to (length *wnh-dlg-wells*)))
+	(progn
+	  (setq *wnh-dlg-wells* (wnh-swap *wnh-dlg-wells* sel to))
+	  (wnh-dlg-fill to)
+	) ;_ end of progn
+      ) ;_ end of if
+    ) ;_ end of progn
+  ) ;_ end of if
+) ;_ end of defun
+
+(defun wnh-swap (lst i j / k out)
+  (setq k 0)
+  (foreach x lst
+    (setq out (cons (cond ((= k i) (nth j lst)) ((= k j) (nth i lst)) (T x)) out)
+	  k   (1+ k)
+    ) ;_ end of setq
+  ) ;_ end of foreach
+  (reverse out)
+) ;_ end of defun
+
+;;; Write the dialog definition to a temp .dcl and return its path
+(defun wnh-dcl-file (/ fn fh)
+  (if (and (setq fn (vl-filename-mktemp "wnh" nil ".dcl"))
+	   (setq fh (open fn "w")))
+    (progn
+      (foreach l
+	'("wnh_order : dialog {"
+	  "  label = \"Well Name Header - page 1\";"
+	  "  : text { value = \"Well names, top to bottom.  Pick a line and use Move Up / Move Down to change the order.\"; }"
+	  "  : row {"
+	  "    : list_box { key = \"names\"; width = 72; height = 14; fixed_width_font = true; }"
+	  "    : column { fixed_height = true;"
+	  "      : button { key = \"up\"; label = \"Move &Up\"; width = 14; fixed_width = true; }"
+	  "      : button { key = \"down\"; label = \"Move &Down\"; width = 14; fixed_width = true; }"
+	  "    }"
+	  "  }"
+	  "  : text { value = \"Notes\"; }"
+	  "  : list_box { key = \"notes\"; width = 90; height = 9; fixed_width_font = true; }"
+	  "  : row { alignment = centered; fixed_width = true;"
+	  "    : button { key = \"accept\"; label = \"&Write to page 1\"; is_default = true; width = 20; fixed_width = true; }"
+	  "    : button { key = \"cancel\"; label = \"Cancel\"; is_cancel = true; width = 12; fixed_width = true; }"
+	  "  }"
+	  "}")
+	(write-line l fh)
+      ) ;_ end of foreach
+      (close fh)
+      fn
+    ) ;_ end of progn
   ) ;_ end of if
 ) ;_ end of defun
 
