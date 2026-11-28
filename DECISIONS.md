@@ -36,6 +36,7 @@ Who: **User** = drafter (project owner) · **Manager** = confirmed with the user
 2. **Deployment to `O:`** and the `acaddoc.lsp` load line. When, and who approves? (See the Overview and Deployment doc §6.3.)
 3. **Merge to `main`**, or open a pull request?
 4. Should header fitting (`WNH_FIT`) be turned on later, and at what minimum size?
+5. **Well type (HZ / DD / vertical)**, parked 2026-11-27. Today one `HZ or DD` property applies to every line, so a mixed pad gets the wrong type on some lines. Vertical wells have no drill path, so WNH falls back to the BH properties, which only hold one well. Proposed fix: keep the property as the answer, add Notes warnings from the drill-path offset (≈0 m means vertical), allow a per-well type change in the window, then test on a real DD job and a real vertical job.
 
 ---
 
@@ -48,6 +49,9 @@ Who: **User** = drafter (project owner) · **Manager** = confirmed with the user
 | B3 | 2026-11-26 | Scope is the **five page 1 area tables**: Area Required, Disposition Areas, Timber Salvage, Upland/Wetland, Incidental Activities. Well coordinates, Road Use and Activity/Client tables are out of scope. | They're the ones calculated from area polylines | Claude |
 | B4 | 2026-11-26 | Treat the routines' rules as the **spec**: ground ha = area / 10 000 / CSF² (CSF from `USERR1`); acres = ha × 2.4710538; ha to 0.001, ac to 0.01; length rounded up | It's what produced every table on the plans | Claude |
 | B5 | 2026-11-26 | **Recommended** (not yet decided): build a read-only checker (`ATC`) first, rebuild later | Real jobs had stale and inconsistent values; a checker can't damage hand edits | Claude, pending the user |
+
+| B6 | 2026-11-27 | **Hectares 3 decimals, acres stay 2 decimals** (no change to ARTS rounding) | Manager rule | Manager (Chase) / User |
+| B7 | 2026-11-27 | Work on a **copy** of ARTS + the IG library in `LISP/Area Tables/`; O: stays untouched. Review in `LISP/Area Tables/ARTS Review.md`. | ARTS was updated in Sep 2026; improve it safely | User |
 
 ### Open questions (Area Tables)
 See `LISP/Area Tables - Discovery.md` §7 (Q1–Q8): checker vs rebuild, total-acres convention, tolerance, the 23022 extension, hand-made rows, DAREA and CSF, Freehold scope, test jobs.

@@ -1,0 +1,419 @@
+<title>Field Concepts</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE everyday learning, a drafter's own reference
+   IDEA a surveyor's yellow field book: hard cover band, grid-ruled pages, red pencil for what matters
+   PICTURE each concept's own working drawing (surfaces, well paths, LSD grid, lease plan) beside its text
+   COLOUR field-book yellow cover, near-black ink, survey red accent, faint blue grid on white pages
+   TYPE Barlow Condensed (engineering lettering) + Inter
+   LAYOUT laptop: yellow band with title + search, then sticky index left, concept pages right; phone: band, index as wrapping chips, pages stacked */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#15140f);--ink:light-dark(#16150f,#ece8da);--soft:light-dark(#5c5a52,#a8a493);--cover:light-dark(#f2cf1d,#3a3208);--coverInk:light-dark(#16150f,#f6e27a);--red:light-dark(#c8231b,#ff6a5c);--blue:light-dark(#2c5fa8,#7fa8e6);--green:light-dark(#2e7d4f,#6fc493);--brown:light-dark(#9a5b23,#d6a06a);--grid:light-dark(#e3ebf5,#24231c);--line:light-dark(#d6d3c7,#3a382e);--panel:light-dark(#faf8f0,#1d1c16)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.6 Inter,system-ui,sans-serif;overflow-x:clip;margin:0}
+h1,h2,h3{font-family:"Barlow Condensed","Arial Narrow",sans-serif;line-height:1.05;letter-spacing:-.01em;margin:0}
+.band{padding-left:max(5vw,16px,env(safe-area-inset-left,0px));padding-right:max(5vw,16px,env(safe-area-inset-right,0px))}
+.cover{background:var(--cover);color:var(--coverInk);margin-top:calc(-1*env(safe-area-inset-top,0px));padding-top:calc(env(safe-area-inset-top,0px) + 2.2rem);padding-bottom:1.8rem;border-bottom:6px solid var(--red)}
+.cover .in{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,420px);gap:24px;align-items:end}
+.cover h1{font-size:clamp(40px,6vw,60px);font-weight:700}
+.cover p{margin:.4rem 0 0;max-width:52ch}
+.search{display:flex;flex-direction:column;gap:6px}
+.search label{font-weight:600;font-size:14px}
+.search input{font:16px Inter,sans-serif;padding:12px 14px;border:2px solid var(--coverInk);border-radius:6px;background:var(--bg);color:var(--ink);width:100%}
+.search input:focus{outline:3px solid var(--red);outline-offset:1px}
+.count{font-size:14px}
+.wrap{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:240px minmax(0,1fr);gap:40px;padding-block:32px 64px}
+nav{position:sticky;top:16px;align-self:start;max-height:calc(100svh - 32px);overflow:auto}
+nav h3{font-size:15px;color:var(--soft);font-family:Inter,sans-serif;font-weight:600;letter-spacing:0;margin:18px 0 6px}
+nav h3:first-child{margin-top:0}
+nav a{display:block;color:var(--ink);text-decoration:none;padding:5px 10px;border-left:3px solid var(--line);font-size:15px}
+nav a:hover{border-left-color:var(--ink)}
+nav a.on{border-left-color:var(--red);color:var(--red);font-weight:600}
+main{display:flex;flex-direction:column;gap:28px}
+article{border:1px solid var(--line);border-radius:8px;padding:clamp(18px,3vw,32px);background-color:var(--bg);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:24px 24px;scroll-margin-top:16px}
+article .cat{font-size:14px;color:var(--soft);margin:0 0 4px}
+article h2{font-size:clamp(30px,4vw,40px);font-weight:600}
+article .one{font-size:18px;font-weight:500;margin:.6rem 0 1rem;padding-left:12px;border-left:4px solid var(--red);max-width:65ch;background:var(--bg)}
+.cols{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;align-items:start}
+.txt{background:var(--bg)}
+.txt p,.txt li{max-width:68ch}
+.txt h3{font-size:22px;margin:1.2rem 0 .3rem;font-weight:600}
+.pic{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px}
+.pic svg{display:block;width:100%;height:auto}
+.pic figcaption{font-size:14px;color:var(--soft);margin-top:6px}
+svg text{font-family:Inter,sans-serif;fill:var(--ink)}
+.f{font-family:"Barlow Condensed",sans-serif;font-size:22px;font-weight:600;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 14px;display:inline-block;margin:.3rem 0}
+.scroll{overflow-x:auto;background:var(--bg)}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600}
+code{font-size:14px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:0 4px;overflow-wrap:anywhere}
+.igi{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:6px;padding:12px 16px;margin-top:1rem}
+.igi b:first-child{color:var(--blue)}
+details{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px 14px;margin-top:10px}
+summary{cursor:pointer;font-weight:600}
+.calc{display:grid;grid-template-columns:repeat(auto-fit,minmax(9em,1fr));gap:12px;align-items:end;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;margin-top:1rem}
+.calc label{display:flex;flex-direction:column;font-size:14px;font-weight:600;gap:4px}
+.calc input{font:16px Inter,sans-serif;padding:8px 10px;border:1px solid var(--soft);border-radius:4px;background:var(--bg);color:var(--ink);width:100%}
+.calc output{font-family:"Barlow Condensed",sans-serif;font-size:30px;font-weight:700;color:var(--red);white-space:nowrap}
+.calc small{display:block;font-size:13px;color:var(--soft)}
+.lsd{display:grid;grid-template-columns:repeat(4,1fr);border:2px solid var(--ink);aspect-ratio:1;max-width:280px;margin:0 auto}
+.lsd span{border:1px solid var(--line);display:grid;place-items:center;font-family:"Barlow Condensed",sans-serif;font-size:24px;font-weight:600}
+.lsd span.hi{background:var(--red);color:#fff}
+.see{font-size:15px}
+.see a{color:var(--red)}
+.empty{border:2px dashed var(--line);border-radius:8px;padding:28px;text-align:center;color:var(--soft)}
+.foot{font-size:14px;color:var(--soft);border-top:1px solid var(--line);padding-top:16px}
+@media(max-width:860px){.wrap{grid-template-columns:minmax(0,1fr);gap:20px}.cover .in{grid-template-columns:minmax(0,1fr)}nav{position:static;max-height:none;display:flex;flex-wrap:wrap;gap:6px}nav h3{display:none}nav a{border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:14px}nav a.on{border-color:var(--red)}.cols{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:600px){table{font-size:13px}th,td{padding:6px 4px}}
+</style>
+
+<header class="cover band">
+  <div class="in">
+    <div>
+      <h1>Field Concepts</h1>
+      <p>Surveying, wells and area-table ideas that come up on wellsite plans, in plain words, with how each one shows up in IGI drawings.</p>
+    </div>
+    <div class="search">
+      <label for="q">Look up a concept</label>
+      <input id="q" type="search" placeholder="e.g. CSF, wetland, 102, LSD" autocomplete="off">
+      <span class="count" id="count"></span>
+    </div>
+  </div>
+</header>
+
+<div class="band"><div class="wrap">
+<nav id="nav" aria-label="Concepts"></nav>
+<main id="main">
+
+<!-- ============ SURVEY & COORDINATES ============ -->
+<article id="csf" data-cat="Survey &amp; coordinates" data-keys="combined scale factor userr1 ground grid ellipsoid elevation factor grid scale factor projection">
+  <p class="cat">Survey &amp; coordinates</p>
+  <h2>Combined Scale Factor (CSF)</h2>
+  <p class="one">The drawing measures on a flat map grid; the plan must report what you'd measure on the actual ground. CSF is the one number that converts between the two.</p>
+  <div class="cols">
+    <div class="txt">
+      <h3>Why we need it</h3>
+      <p>The Earth is curved but coordinate grids are flat, so a tape distance on site (<b>ground</b>) differs slightly from the distance between coordinates in the drawing (<b>grid</b>). Tiny, but our tables print areas to 0.001 ha, so it changes the numbers.</p>
+      <h3>Three surfaces, two corrections</h3>
+      <table><tr><th>Ground</th><td>The physical Earth, where the crew measures</td></tr><tr><th>Ellipsoid</th><td>A smooth mathematical model of the Earth</td></tr><tr><th>Grid</th><td>A flat coordinate system (UTM, Alberta 3TM). <b>Our drawings are grid.</b></td></tr></table>
+      <p>Ground × <a href="#ef">Elevation Factor</a> → ellipsoid, × <a href="#gsf">Grid Scale Factor</a> → grid. CSF rolls both into one multiplier:</p>
+      <div class="f">CSF = EF × GSF</div>
+      <p>Typical values: about 0.9995 to 1.0001.</p>
+    </div>
+    <figure class="pic" style="margin:0">
+      <svg viewBox="0 0 520 300" role="img" aria-label="Ground, ellipsoid and grid surfaces">
+        <path d="M10 90 C60 40 100 70 140 75 S200 40 240 55 S320 30 360 70 S440 95 510 85" fill="none" stroke="var(--brown)" stroke-width="5"/>
+        <path d="M20 230 Q260 110 500 230" fill="none" stroke="var(--green)" stroke-width="5"/>
+        <line x1="10" y1="270" x2="510" y2="270" stroke="var(--blue)" stroke-width="5"/>
+        <circle cx="120" cy="72" r="7" fill="var(--red)"/><circle cx="420" cy="80" r="7" fill="var(--red)"/>
+        <line x1="120" y1="72" x2="420" y2="80" stroke="var(--red)" stroke-width="2.5" stroke-dasharray="7 6"/>
+        <line x1="120" y1="80" x2="120" y2="270" stroke="var(--soft)" stroke-dasharray="4 5"/><line x1="420" y1="88" x2="420" y2="270" stroke="var(--soft)" stroke-dasharray="4 5"/>
+        <circle cx="120" cy="270" r="7" fill="var(--blue)"/><circle cx="420" cy="270" r="7" fill="var(--blue)"/>
+        <text x="96" y="56" font-size="22" font-weight="600">A</text><text x="432" y="62" font-size="22" font-weight="600">B</text>
+        <text x="190" y="118" font-size="20" fill="var(--brown)" style="fill:var(--brown)">ground</text>
+        <text x="200" y="196" font-size="20" style="fill:var(--green)">ellipsoid</text>
+        <text x="210" y="258" font-size="20" style="fill:var(--blue)">grid (drawing)</text>
+      </svg>
+      <figcaption>The same A–B measures slightly differently on each surface. Not to scale.</figcaption>
+    </figure>
+  </div>
+  <div class="txt">
+    <h3>Which way to convert</h3>
+    <div class="scroll"><table><tr><th>Direction</th><th>Formula</th><th>When</th></tr>
+      <tr><td>Ground → grid</td><td><b>Grid = Ground × CSF</b></td><td>Putting a crew's measurement into the drawing</td></tr>
+      <tr><td>Grid → ground</td><td><b>Ground = Grid ÷ CSF</b></td><td>Reporting from the drawing (what our area tables do)</td></tr>
+      <tr><td>Areas</td><td><b>Ground area = Grid area ÷ CSF²</b></td><td>Area is length × width, so both get corrected</td></tr></table></div>
+    <p>1,000 m on the ground at CSF 0.999500 is 999.500 m on the grid: 50 cm in one kilometre.</p>
+    <div class="calc" aria-label="Grid to ground area calculator">
+      <label for="cA">Grid area in drawing (ha)<input id="cA" type="number" step="0.0001" value="4.1580"></label>
+      <label for="cF">CSF (USERR1)<input id="cF" type="number" step="0.00001" value="0.99960"></label>
+      <div><small>Ground area for the table</small><output id="cOut">–</output><small id="cDiff"></small></div>
+    </div>
+    <div class="igi"><b>In IGI drawings.</b> CSF is stored in the <code>USERR1</code> system variable (type <code>USERR1</code> to see it). <code>igl-get-combined-scale-factor</code> reads it rather than the CSF drawing property. ARTS, AWUW and IAT compute <b>ha = m² ÷ 10,000 ÷ CSF²</b>. <b>DAREA doesn't apply CSF</b>, so its areas are grid, not ground.</div>
+    <h3>Checklist</h3>
+    <ul><li>Is CSF already applied? Don't apply it twice or miss it.</li><li>Direction: ÷ for grid → ground. Some workflows store the reciprocal.</li><li>Areas use CSF², not CSF.</li><li>CSF is not the plot or viewport scale (1:500, 1:1000).</li></ul>
+    <details><summary>Practice questions</summary>
+      <p><b>1.</b> The crew measures 2,000 m. CSF 0.999800. Grid larger or smaller? → <b>Smaller: 1,999.600 m</b> (0.400 m less).</p>
+      <p><b>2.</b> A lease is 2.500 ha in the drawing, <code>USERR1</code> = 0.99950. Table value? → 2.500 ÷ 0.99900 = <b>2.503 ha</b> (6.18 ac).</p>
+      <p><b>3.</b> DAREA says 2.500 ha for the same lease. Why? → It skips CSF², so it reports <b>grid</b> area.</p>
+    </details>
+  </div>
+</article>
+
+<article id="grid-ground" data-cat="Survey &amp; coordinates" data-keys="grid distance ground distance tape coordinates">
+  <p class="cat">Survey &amp; coordinates</p>
+  <h2>Grid vs ground distance</h2>
+  <p class="one"><b>Grid</b> is what you measure between coordinates in the drawing. <b>Ground</b> is what a tape on site would read. They differ by the CSF.</p>
+  <p class="see txt">Ground = Grid ÷ CSF. See <a href="#csf">Combined Scale Factor</a>.</p>
+</article>
+
+<article id="ef" data-cat="Survey &amp; coordinates" data-keys="elevation factor ellipsoidal height radius">
+  <p class="cat">Survey &amp; coordinates</p>
+  <h2>Elevation Factor (EF)</h2>
+  <p class="one">Higher ground sits farther from the Earth's centre, so the same angle covers a longer distance up there. EF shrinks ground distance down to the ellipsoid.</p>
+  <div class="txt"><div class="f">EF = R ÷ (R + h)</div>
+  <p>R ≈ 6,371,000 m (Earth's radius); h = <b>ellipsoidal height</b>, not just elevation above sea level. A lease near 800 m gives EF ≈ 0.999874. For all of Alberta, EF is a little under 1.</p>
+  <p class="see">Part of <a href="#csf">CSF</a>.</p></div>
+</article>
+
+<article id="gsf" data-cat="Survey &amp; coordinates" data-keys="grid scale factor projection central meridian distortion">
+  <p class="cat">Survey &amp; coordinates</p>
+  <h2>Grid Scale Factor (GSF)</h2>
+  <p class="one">Flattening a curved Earth onto a map always stretches or squashes it, like flattening an orange peel. GSF is how much, at your location.</p>
+  <div class="txt"><p>It's lowest on the projection's <b>central meridian</b> (0.9996 in UTM, 0.9999 in Alberta 3TM) and grows moving east or west, sometimes going above 1 near zone edges.</p>
+  <p class="see">Part of <a href="#csf">CSF</a>. See <a href="#utm">UTM and 3TM</a>.</p></div>
+</article>
+
+<article id="utm" data-cat="Survey &amp; coordinates" data-keys="utm 3tm projection zone central meridian nad83">
+  <p class="cat">Survey &amp; coordinates</p>
+  <h2>UTM and 3TM</h2>
+  <p class="one">Two ways of flattening Alberta onto a coordinate grid. Narrower zones mean less distortion.</p>
+  <div class="scroll"><table><tr><th></th><th>UTM</th><th>Alberta 3TM</th></tr>
+    <tr><td>Zone width</td><td>6° of longitude</td><td>3° of longitude</td></tr>
+    <tr><td>Scale on central meridian</td><td>0.9996</td><td>0.9999</td></tr>
+    <tr><td>Alberta zones</td><td>11 and 12</td><td>Central meridians 111°, 114°, 117°, 120° W</td></tr></table></div>
+</article>
+
+<!-- ============ WELLS & NAMING ============ -->
+<article id="well-types" data-cat="Wells &amp; naming" data-keys="vertical directional dd horizontal hz well type drill path">
+  <p class="cat">Wells &amp; naming</p>
+  <h2>Well types: vertical, DD, HZ</h2>
+  <p class="one">The difference is the path the hole takes underground, and it changes the well name.</p>
+  <div class="cols">
+    <div class="txt scroll"><table><tr><th></th><th>Vertical</th><th>Directional (DD)</th><th>Horizontal (HZ)</th></tr>
+      <tr><td>Path</td><td>Straight down</td><td>Steered at an angle</td><td>Curves to about flat (80°+)</td></tr>
+      <tr><td>Bottom hole</td><td>Under the surface</td><td>Offset, often a few hundred m</td><td>Often 1–3 km away</td></tr>
+      <tr><td>On the drawing</td><td>Usually no drill path</td><td>Short drill path</td><td>Long drill path</td></tr>
+      <tr><td>Name</td><td><code>CVE 100 BERLRW 5-18-59-24</code></td><td><code>CVE 100 DD BERLRW …</code></td><td><code>CVE 100 HZ BERLRW …</code></td></tr></table>
+      <p>An HZ well is technically directionally drilled too, but in names the AER uses <b>DD</b> for angled, not-horizontal wells.</p>
+    </div>
+    <figure class="pic" style="margin:0">
+      <svg viewBox="0 0 520 300" role="img" aria-label="Side view of vertical, directional and horizontal wells">
+        <rect x="0" y="40" width="520" height="8" fill="var(--brown)" opacity=".5"/>
+        <rect x="0" y="215" width="520" height="40" fill="var(--soft)" opacity=".15"/>
+        <circle cx="70" cy="44" r="9" fill="var(--ink)"/><line x1="70" y1="44" x2="70" y2="236" stroke="var(--blue)" stroke-width="6"/><circle cx="70" cy="236" r="8" fill="var(--red)"/>
+        <circle cx="180" cy="44" r="9" fill="var(--ink)"/><path d="M180 44 L180 100 Q185 130 250 236" fill="none" stroke="var(--blue)" stroke-width="6"/><circle cx="250" cy="236" r="8" fill="var(--red)"/>
+        <circle cx="300" cy="44" r="9" fill="var(--ink)"/><path d="M300 44 L300 150 Q300 232 370 234 L505 234" fill="none" stroke="var(--blue)" stroke-width="6"/><circle cx="505" cy="234" r="8" fill="var(--red)"/>
+        <text x="40" y="285" font-size="20">Vertical</text><text x="178" y="285" font-size="20">DD</text><text x="370" y="285" font-size="20">HZ (lateral)</text>
+        <text x="390" y="206" font-size="16" style="fill:var(--soft)">formation</text>
+      </svg>
+      <figcaption>Side view. Black = surface location, red = bottom hole.</figcaption>
+    </figure>
+  </div>
+  <div class="igi"><b>In WNH.</b> One <code>HZ or DD</code> drawing property applies to every line, so a mixed pad gets the wrong type on some lines, and vertical wells with no drill path aren't found. Parked as WNH open question 5.</div>
+</article>
+
+<article id="lateral" data-cat="Wells &amp; naming" data-keys="lateral horizontal leg">
+  <p class="cat">Wells &amp; naming</p>
+  <h2>Lateral</h2>
+  <p class="one">The flat, horizontal leg of an HZ well that runs through the formation, often 1–3 km long.</p>
+  <p class="see txt">See <a href="#well-types">Well types</a>. The drawing is a top-down plan, so it shows how far away the bottom hole is, but not how steep the hole is.</p>
+</article>
+
+<article id="lsd" data-cat="Wells &amp; naming" data-keys="lsd legal subdivision section township range meridian ats dls location w4m">
+  <p class="cat">Wells &amp; naming</p>
+  <h2>LSD and legal location</h2>
+  <p class="one">Alberta land is addressed as <b>LSD-Section-Township-Range-Meridian</b>, e.g. <code>5-18-59-24 W4M</code>.</p>
+  <div class="cols">
+    <div class="txt">
+      <ul>
+        <li><b>Meridian:</b> W4M = 4th meridian (110° W), W5M = 114° W, W6M = 118° W.</li>
+        <li><b>Range:</b> counted westward from the meridian, about 6 miles each.</li>
+        <li><b>Township:</b> counted northward from the US border, 6 miles square, 36 sections.</li>
+        <li><b>Section:</b> 1 mile square, about 640 acres.</li>
+        <li><b>LSD</b> (legal subdivision): 1/16 of a section, about 40 acres, numbered 1–16 in a back-and-forth pattern starting at the south-east corner.</li>
+      </ul>
+      <div class="igi"><b>In WNH.</b> Bottom-hole LSDs come from the <code>10-Section Labels</code> plus a 4 × 4 split of each section.</div>
+    </div>
+    <figure class="pic" style="margin:0">
+      <div class="lsd" aria-label="LSD numbering in a section"><span>13</span><span>14</span><span>15</span><span>16</span><span>12</span><span>11</span><span>10</span><span>9</span><span class="hi">5</span><span>6</span><span>7</span><span>8</span><span>4</span><span>3</span><span>2</span><span>1</span></div>
+      <figcaption>LSDs in one section, north up. LSD 1 is the south-east corner; 5 is highlighted.</figcaption>
+    </figure>
+  </div>
+</article>
+
+<article id="uwi" data-cat="Wells &amp; naming" data-keys="uwi 100 102 103 unique well identifier location exception">
+  <p class="cat">Wells &amp; naming</p>
+  <h2>UWI and 100 / 102 / 103</h2>
+  <p class="one">The Unique Well Identifier. Its leading number tells wells that end in the <b>same LSD</b> apart.</p>
+  <div class="txt"><p>The first well whose bottom hole is in an LSD is <b>100</b>. The next ones in that same LSD are <b>102</b>, <b>103</b> …, in licence order. Existing wells count first.</p>
+  <p>Full form: <code>100/05-18-059-24W4/00</code>.</p>
+  <div class="igi"><b>In WNH.</b> Numbered from all wells, new and existing. A <code>Bottom Hole 102/…</code> label overrides it. The UWI drawing property is ignored because one value can't describe a whole pad. Cenovus always shows 100; Whitecap never does.</div></div>
+</article>
+
+<article id="strike" data-cat="Wells &amp; naming" data-keys="strike area field smoky restha berlrw aer bos order">
+  <p class="cat">Wells &amp; naming</p>
+  <h2>Strike area / field</h2>
+  <p class="one">The AER area the bottom hole falls in. Its name or abbreviation goes in the well name (SMOKY, RESTHA, BERLRW …).</p>
+  <div class="txt"><p>A field order wins over a strike area. One pad can span two areas, so each well is looked up by its own bottom-hole section.</p>
+  <div class="igi"><b>In WNH.</b> Looked up in <code>Well Name Header - Strike Areas.txt</code>, which is built from the AER Order System data. Refresh it monthly.</div></div>
+</article>
+
+<!-- ============ AREA TABLES ============ -->
+<article id="upland-wetland" data-cat="Area tables" data-keys="upland wetland bog fen marsh swamp wetland policy awuw">
+  <p class="cat">Area tables</p>
+  <h2>Upland vs wetland</h2>
+  <p class="one">What kind of ground the new lease sits on: dry and firm (upland), or wet most of the year (wetland).</p>
+  <div class="cols">
+    <div class="txt">
+      <div class="scroll"><table><tr><th></th><th>Upland</th><th>Wetland</th></tr>
+        <tr><td>What</td><td>Forest, grassland, farmland</td><td>Bog, fen, marsh, swamp, shallow open water</td></tr>
+        <tr><td>Why it matters</td><td>Normal construction</td><td>Alberta Wetland Policy: may need extra approval, reclamation or compensation</td></tr></table></div>
+      <div class="f">Upland + Wetland = Area Required total</div>
+      <p>Job 26133: 4.135 + 0.023 = <b>4.158 ha</b> ✓. All Crown plans need this table, even when wetland is 0.</p>
+      <div class="igi"><b>In IGI drawings.</b> <b>Wetland</b> = the area inside <code>Areas Linework-Wetland</code>. <b>Upland</b> = Area Required total − Wetland. Routine: <code>AWUW</code>.</div>
+    </div>
+    <figure class="pic" style="margin:0">
+      <svg viewBox="0 0 520 320" role="img" aria-label="Lease partly overlapping a wetland">
+        <defs><pattern id="hatch" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="12" stroke="var(--blue)" stroke-width="3"/></pattern><clipPath id="lease"><rect x="90" y="60" width="260" height="200"/></clipPath></defs>
+        <path d="M290 30 C380 10 500 60 490 150 C480 240 400 300 320 270 C260 250 250 120 290 30Z" fill="var(--blue)" opacity=".18"/>
+        <path d="M290 30 C380 10 500 60 490 150 C480 240 400 300 320 270 C260 250 250 120 290 30Z" fill="url(#hatch)" clip-path="url(#lease)"/>
+        <rect x="90" y="60" width="260" height="200" fill="none" stroke="var(--red)" stroke-width="5"/>
+        <text x="130" y="168" font-size="24" font-weight="600">Upland</text>
+        <text x="380" y="160" font-size="22" style="fill:var(--blue)">wetland</text>
+        <text x="96" y="294" font-size="18" style="fill:var(--red)">proposed lease</text>
+      </svg>
+      <figcaption>Hatched = the wetland part of the lease. The rest is upland.</figcaption>
+    </figure>
+  </div>
+</article>
+
+<article id="abmi" data-cat="Area tables" data-keys="abmi alberta biodiversity monitoring institute wetland inventory">
+  <p class="cat">Area tables</p>
+  <h2>ABMI</h2>
+  <p class="one">The Alberta Biodiversity Monitoring Institute, run with the U of A and U of C. It publishes the province-wide wetland inventory.</p>
+  <p class="see txt">That inventory is the source of the wetland linework behind the <a href="#upland-wetland">Upland / Wetland</a> table. Still to confirm: whether every job uses ABMI or sometimes another source.</p>
+</article>
+
+<article id="incidental" data-cat="Area tables" data-keys="incidental activities tws log deck borrow pit campsite tia bank stabilization ia1 iat ial workspace">
+  <p class="cat">Area tables</p>
+  <h2>Incidental activities</h2>
+  <p class="one">Extra, usually temporary, pieces of land needed to <b>build</b> the site, listed separately from the lease itself.</p>
+  <div class="cols">
+    <div class="txt">
+      <div class="scroll"><table><tr><th>Activity</th><th>What for</th></tr>
+        <tr><td><a href="#tws">TWS</a></td><td>Room beside the lease for soil piles and equipment</td></tr>
+        <tr><td>Log deck</td><td>Piling timber cut during clearing</td></tr>
+        <tr><td>Borrow pit</td><td>Digging gravel or fill for the pad</td></tr>
+        <tr><td>Campsite</td><td>A temporary crew camp</td></tr>
+        <tr><td><a href="#tia">TIA</a></td><td>A temporary road in</td></tr>
+        <tr><td>Bank stabilization</td><td>Work on a creek bank or slope</td></tr></table></div>
+      <p>Table columns: <b>ID</b> (IA1, IA2 …), activity, latitude, longitude, hectares. A <b>*</b> means it's entirely inside the disposition, so it adds no new land.</p>
+      <div class="igi"><b>In IGI drawings.</b> <code>Workspace*</code> layers. <code>IAL</code> labels each one, and <code>IAT</code> builds the table. Each IA's hectares must match its row in Disposition and Timber Salvage.</div>
+    </div>
+    <figure class="pic" style="margin:0">
+      <svg viewBox="0 0 520 320" role="img" aria-label="Plan of a lease with incidental activity areas">
+        <rect x="150" y="70" width="210" height="170" fill="var(--red)" opacity=".1" stroke="var(--red)" stroke-width="5"/>
+        <text x="200" y="162" font-size="24" font-weight="600">Wellsite</text>
+        <rect x="360" y="70" width="90" height="170" fill="none" stroke="var(--ink)" stroke-width="3" stroke-dasharray="10 6"/>
+        <text x="372" y="150" font-size="20" font-weight="600">IA1</text><text x="372" y="174" font-size="17">TWS</text>
+        <rect x="60" y="150" width="90" height="90" fill="none" stroke="var(--ink)" stroke-width="3" stroke-dasharray="10 6"/>
+        <text x="72" y="190" font-size="20" font-weight="600">IA2</text><text x="72" y="214" font-size="17">log deck</text>
+        <path d="M255 240 L255 310" stroke="var(--brown)" stroke-width="14"/><text x="272" y="296" font-size="17" style="fill:var(--brown)">access road</text>
+      </svg>
+      <figcaption>Plan view. Dashed = incidental activities beside the lease.</figcaption>
+    </figure>
+  </div>
+</article>
+
+<article id="tws" data-cat="Area tables" data-keys="tws temporary workspace">
+  <p class="cat">Area tables</p>
+  <h2>TWS (Temporary Workspace)</h2>
+  <p class="one">Extra room beside the lease, used during construction for soil piles and equipment, then reclaimed.</p>
+  <p class="see txt">One kind of <a href="#incidental">incidental activity</a>.</p>
+</article>
+
+<article id="tia" data-cat="Area tables" data-keys="tia temporary industrial access road">
+  <p class="cat">Area tables</p>
+  <h2>TIA (Temporary Industrial Access)</h2>
+  <p class="one">A temporary road used to get equipment in during construction.</p>
+  <p class="see txt">One kind of <a href="#incidental">incidental activity</a>.</p>
+</article>
+
+<article id="existing-new" data-cat="Area tables" data-keys="outside existing within existing new cut existing cut disposition areas timber salvage component overlap">
+  <p class="cat">Area tables</p>
+  <h2>Outside / within existing, new / existing cut</h2>
+  <p class="one">Each piece of the new project is split two ways: is the land <b>already granted</b> to someone (existing disposition)? Are the trees <b>already cleared</b> (existing cut)? What's left over is the new part.</p>
+  <div class="cols">
+    <div class="txt">
+      <div class="f">Outside Existing = piece − existing disposition inside it</div>
+      <div class="f">New Cut = piece − existing cut inside it</div>
+      <p>A <b>piece</b> (component) is one row of Area Required: the site, the access road, a TWS …</p>
+      <div class="scroll"><table><tr><th>Example: 3.000 ha pad</th><th>Within / Existing</th><th>Outside / New</th></tr>
+        <tr><td>Disposition Areas table</td><td>1.000 ha overlaps an old lease</td><td><b>2.000 ha</b> new land</td></tr>
+        <tr><td>Timber Salvage table</td><td>1.200 ha already cleared</td><td><b>1.800 ha</b> trees to cut</td></tr></table></div>
+      <p>The two splits are separate questions, so the numbers don't have to match.</p>
+      <div class="igi"><b>In IGI drawings.</b> The existing parts are the shapes on <code>Areas Linework-Existing Disposition</code> and <code>Areas Linework-Existing Cut</code>. ARTS only counts a shape that sits <b>wholly inside</b> the piece. One that crosses the edge is silently ignored, so draw it clipped to the piece.</div>
+    </div>
+    <figure class="pic" style="margin:0">
+      <svg viewBox="0 0 520 300" role="img" aria-label="New pad partly overlapping an existing disposition">
+        <defs><pattern id="h2" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="12" stroke="var(--soft)" stroke-width="3"/></pattern></defs>
+        <rect x="40" y="70" width="200" height="170" fill="var(--soft)" opacity=".15"/>
+        <rect x="160" y="70" width="80" height="170" fill="url(#h2)"/>
+        <rect x="160" y="70" width="300" height="170" fill="none" stroke="var(--red)" stroke-width="5"/>
+        <rect x="40" y="70" width="200" height="170" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-dasharray="9 6"/>
+        <text x="48" y="58" font-size="18">old lease (existing)</text>
+        <text x="300" y="58" font-size="18" style="fill:var(--red)">new pad</text>
+        <text x="168" y="276" font-size="18">within</text>
+        <text x="300" y="164" font-size="22" font-weight="600">outside existing</text>
+      </svg>
+      <figcaption>Hatched = the part of the new pad already inside an old lease. The rest is outside existing. Existing cut works the same way, with cleared ground instead of an old lease.</figcaption>
+    </figure>
+  </div>
+</article>
+
+<article id="ha-ac"data-cat="Area tables" data-keys="hectare acre conversion rounding 2.4710538">
+  <p class="cat">Area tables</p>
+  <h2>Hectares and acres</h2>
+  <p class="one">1 ha = 10,000 m² = 2.4710538 acres. Our tables show both.</p>
+  <div class="txt"><div class="f">ac = ha × 2.4710538</div>
+  <p>Rounding: hectares to <b>0.001</b>, acres to <b>0.01</b>. Compute from the ground area (after <a href="#csf">CSF²</a>), not from rounded numbers, or totals can drift by 0.01.</p></div>
+</article>
+
+<!-- ============ LAND & APPROVALS ============ -->
+<article id="disposition" data-cat="Land &amp; approvals" data-keys="disposition lease crown msl surface lease">
+  <p class="cat">Land &amp; approvals</p>
+  <h2>Disposition</h2>
+  <p class="one">The right to use Crown land that the government grants for the project, such as the wellsite lease (e.g. an MSL) and its access road.</p>
+  <p class="see txt">Its pieces are the rows of the <b>Disposition Areas</b> table. <a href="#incidental">Incidental activities</a> are approved with it but listed separately.</p>
+</article>
+
+<article id="crown-freehold" data-cat="Land &amp; approvals" data-keys="crown freehold private land">
+  <p class="cat">Land &amp; approvals</p>
+  <h2>Crown vs freehold land</h2>
+  <p class="one"><b>Crown</b> land is owned by the province; <b>freehold</b> is privately owned.</p>
+  <div class="txt"><p>Crown plans carry all five area tables (Area Required, Disposition, Timber Salvage, Upland/Wetland, Incidental Activities). Freehold plans carry only Area Required.</p></div>
+</article>
+
+<div class="empty" id="empty" hidden>No concept matches that. Try a shorter word, or ask Claude to add it.</div>
+<p class="foot">To add a concept, ask Claude to add it here; the same notes are in <code>Learning/</code> in the Civil3D-Readme repo. Job numbers are internal IGI examples.</p>
+</main>
+</div></div>
+
+<script>
+{
+  const arts=[...document.querySelectorAll('main article')];
+  const nav=document.getElementById('nav'),q=document.getElementById('q'),count=document.getElementById('count'),empty=document.getElementById('empty');
+  const cats=[...new Set(arts.map(a=>a.dataset.cat))];
+  nav.innerHTML=cats.map(c=>'<h3>'+c.replace(/&/g,'&amp;')+'</h3>'+arts.filter(a=>a.dataset.cat===c).map(a=>'<a href="#'+a.id+'" data-id="'+a.id+'">'+a.querySelector('h2').textContent.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</a>').join('')).join('');
+  const links=[...nav.querySelectorAll('a')];
+  const text=arts.map(a=>(a.textContent+' '+(a.dataset.keys||'')).toLowerCase());
+  function filter(){
+    const t=q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let n=0;
+    arts.forEach((a,i)=>{const ok=t.every(w=>text[i].includes(w));a.hidden=!ok;if(ok)n++;links.find(l=>l.dataset.id===a.id).hidden=!ok;});
+    nav.querySelectorAll('h3').forEach(h=>{let s=h.nextElementSibling,any=false;while(s&&s.tagName==='A'){if(!s.hidden)any=true;s=s.nextElementSibling;}h.hidden=!any;});
+    empty.hidden=n>0;
+    count.textContent=t.length?n+' of '+arts.length+' concepts':arts.length+' concepts';
+  }
+  q.addEventListener('input',filter);filter();
+  function mark(){const id=location.hash.slice(1);links.forEach(l=>l.classList.toggle('on',l.dataset.id===id));const a=document.getElementById(id);if(a&&a.hidden){q.value='';filter();}if(a)a.scrollIntoView();}
+  window.addEventListener('hashchange',mark);if(location.hash)mark();
+  const cA=document.getElementById('cA'),cF=document.getElementById('cF'),out=document.getElementById('cOut'),diff=document.getElementById('cDiff');
+  function calc(){const a=parseFloat(cA.value),f=parseFloat(cF.value);if(!(a>0)||!(f>0.9&&f<1.1)){out.textContent='–';diff.textContent='Enter an area and a CSF near 1';return;}const g=a/(f*f);out.textContent=g.toFixed(3)+' ha';diff.textContent=(g*2.4710538146717).toFixed(2)+' ac · '+(g-a>=0?'+':'')+Math.round((g-a)*10000)+' m² vs grid';}
+  cA.addEventListener('input',calc);cF.addEventListener('input',calc);calc();
+}
+</script>
